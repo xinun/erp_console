@@ -72,7 +72,7 @@ async function searchJira(
   authConfig: AtlassianAuthConfig,
   dateRange: DateRange
 ): Promise<SearchResult[]> {
-  const safeQ = q.replace(/"/g, '\\"');
+  const safeQ = q.replace(/"/g, '\\"').split(/\s+/).filter(Boolean).map(t => `${t}*`).join(' ');
   const jql = `text~"${safeQ}"${getJiraDateFilter(dateRange)} ORDER BY updated DESC`;
 
   const params = new URLSearchParams({
@@ -130,7 +130,7 @@ async function searchConfluence(
   authConfig: AtlassianAuthConfig,
   dateRange: DateRange
 ): Promise<SearchResult[]> {
-  const safeQ = q.replace(/"/g, '\\"');
+  const safeQ = q.replace(/"/g, '\\"').split(/\s+/).filter(Boolean).map(t => `${t}*`).join(' ');
   const cql = `text~"${safeQ}"${getConfluenceDateFilter(dateRange)} ORDER BY lastModified DESC`;
 
   const params = new URLSearchParams({ cql, limit: '20', excerpt: 'highlight' });

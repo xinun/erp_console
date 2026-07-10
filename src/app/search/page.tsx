@@ -11,6 +11,7 @@ import type {
 } from '@/lib/types';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useAtlassianAuth } from '@/hooks/useAtlassianAuth';
+import { useMattermostAuth } from '@/hooks/useMattermostAuth';
 
 const CONFIG_KEY = 'mantech_search_config';
 
@@ -431,96 +432,66 @@ function GoogleDrawerContent({ connected, email, loading, hasClientId, onConnect
 // ─── Mattermost Drawer Content ────────────────────────────────────────────────
 
 interface MattermostDrawerProps {
-  initialConfig: SearchConfig | null;
-  onSave: (config: SearchConfig) => void;
+  connected: boolean;
+  loading: boolean;
+  hasClientId: boolean;
+  onConnect: () => void;
+  onDisconnect: () => void;
 }
 
-function MattermostDrawerContent({ initialConfig, onSave }: MattermostDrawerProps) {
-  const [baseUrl, setBaseUrl] = useState(initialConfig?.mattermostUrl ?? '');
-  const [token, setToken] = useState(initialConfig?.mattermostToken ?? '');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verifySuccess, setVerifySuccess] = useState<string | null>(null);
-  const [verifyError, setVerifyError] = useState<string | null>(null);
+function MattermostDrawerContent({ connected, loading, hasClientId, onConnect, onDisconnect }: MattermostDrawerProps) {
+  if (!hasClientId) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <p className="text-sm font-medium text-amber-800 mb-2">관리자 설정이 필요합니다</p>
+        <p className="text-xs text-amber-700 leading-relaxed">
+          Mattermost 통합 메뉴에서 OAuth 2.0 앱을 등록하고,{' '}
+          <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_MATTERMOST_URL</code>,{' '}
+          <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_MATTERMOST_CLIENT_ID</code> 환경변수를 설정해주세요.
+        </p>
+      </div>
+    );
+  }
 
-  const handleVerify = async () => {
-    if (!baseUrl || !token) {
-      setVerifyError('서버 주소와 토큰을 모두 입력해주세요.');
-      return;
-    }
-    setIsVerifying(true);
-    setVerifyError(null);
-    setVerifySuccess(null);
-    try {
-      const cleanUrl = baseUrl.replace(/\/$/, '');
-      const res = await fetch(`${cleanUrl}/api/v4/users/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('인증 실패');
-      const data = await res.json();
-      setVerifySuccess(`${data.username} 계정으로 연결되었습니다.`);
-    } catch {
-      setVerifyError('연결에 실패했습니다. 주소와 토큰을 확인해주세요.');
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const handleSave = () => {
-    const config = initialConfig || { jiraBaseUrl: '', jiraEmail: '', jiraToken: '' };
-    onSave({ ...config, mattermostUrl: baseUrl, mattermostToken: token });
-  };
+  if (connected) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8l4 4 6-6" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-800">Mattermost 연결됨</p>
+            <p className="text-xs text-gray-500">채팅 대화를 검색할 수 있습니다</p>
+          </div>
+        </div>
+        <button
+          onClick={onDisconnect}
+          className="w-full h-9 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+        >
+          연결 해제
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1.5">서버 주소</label>
-          <input
-            type="url"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://mattermost.your-company.com"
-            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1.5">개인용 액세스 토큰 (PAT)</label>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Mattermost 토큰을 입력하세요"
-            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-          />
-        </div>
-      </div>
-      
-      {verifyError && (
-        <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-xs text-red-600">{verifyError}</p>
-        </div>
-      )}
-      {verifySuccess && (
-        <div className="px-3 py-2.5 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-xs text-green-600">{verifySuccess}</p>
-        </div>
-      )}
-
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={handleVerify}
-          disabled={isVerifying}
-          className="h-9 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
-        >
-          {isVerifying ? '확인 중...' : '연결 테스트'}
-        </button>
-        <button
-          onClick={handleSave}
-          className="flex-1 h-9 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          저장
-        </button>
-      </div>
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500 leading-relaxed">
+        사내 메신저(Mattermost) 계정으로 로그인하여 소속된 팀의 대화 내용을 통합 검색할 수 있습니다.
+      </p>
+      <button
+        onClick={onConnect}
+        disabled={loading}
+        className="w-full h-10 flex items-center justify-center gap-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        {loading ? '연결 중...' : 'Mattermost 계정으로 연결'}
+      </button>
     </div>
   );
 }
@@ -533,6 +504,7 @@ interface DrawerProps {
   atlassianConfig: SearchConfig | null;
   atlassianAuth: ReturnType<typeof useAtlassianAuth>;
   google: ReturnType<typeof useGoogleAuth>;
+  mattermost: ReturnType<typeof useMattermostAuth>;
   onClose: () => void;
   onAtlassianSave: (c: SearchConfig) => void;
 }
@@ -551,7 +523,7 @@ const DRAWER_DESCS: Record<NonNullable<DrawerType>, string> = {
   mattermost: '사내 메신저 채팅 대화를 검색합니다.',
 };
 
-function Drawer({ open, type, atlassianConfig, atlassianAuth, google, onClose, onAtlassianSave }: DrawerProps) {
+function Drawer({ open, type, atlassianConfig, atlassianAuth, google, mattermost, onClose, onAtlassianSave }: DrawerProps) {
   return (
     <>
       {/* Backdrop */}
@@ -613,8 +585,11 @@ function Drawer({ open, type, atlassianConfig, atlassianAuth, google, onClose, o
               )}
               {type === 'mattermost' && (
                 <MattermostDrawerContent
-                  initialConfig={atlassianConfig}
-                  onSave={onAtlassianSave}
+                  connected={mattermost.connected}
+                  loading={mattermost.loading}
+                  hasClientId={mattermost.hasClientId}
+                  onConnect={mattermost.connect}
+                  onDisconnect={mattermost.disconnect}
                 />
               )}
             </div>
@@ -806,6 +781,7 @@ export default function SearchPage() {
   const router = useRouter();
   const google = useGoogleAuth();
   const atlassianAuth = useAtlassianAuth();
+  const mattermost = useMattermostAuth();
 
   const [atlassianConfig, setAtlassianConfig] = useState<SearchConfig | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerType>(null);
@@ -837,6 +813,13 @@ export default function SearchPage() {
     }
   }, [google.connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Mattermost 연결 시 mattermost 소스 자동 추가
+  useEffect(() => {
+    if (mattermost.connected && !filters.sources.includes('mattermost')) {
+      setFilters((p) => ({ ...p, sources: [...p.sources, 'mattermost'] }));
+    }
+  }, [mattermost.connected]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleAtlassianSave = (config: SearchConfig) => {
     setAtlassianConfig(config);
     if (!filters.sources.includes('jira')) {
@@ -849,7 +832,8 @@ export default function SearchPage() {
     if (!q) return;
 
     const atlassianConnected = !!atlassianConfig || atlassianAuth.connected;
-    const hasAnyConnection = atlassianConnected || google.connected;
+    const mattermostConnected = mattermost.connected;
+    const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
     if (!hasAnyConnection) {
       setErrors({ global: '검색할 서비스가 없습니다. 왼쪽에서 서비스를 연결해주세요.' });
       setHasSearched(true);
@@ -902,9 +886,10 @@ export default function SearchPage() {
       const googleToken = google.getToken();
       if (googleToken) headers['x-google-token'] = googleToken;
 
-      if (atlassianConfig?.mattermostUrl && atlassianConfig?.mattermostToken) {
-        headers['x-mattermost-url'] = atlassianConfig.mattermostUrl;
-        headers['x-mattermost-token'] = atlassianConfig.mattermostToken;
+      const mattermostToken = mattermost.getToken();
+      if (mattermostToken && mattermost.baseUrl) {
+        headers['x-mattermost-url'] = mattermost.baseUrl;
+        headers['x-mattermost-token'] = mattermostToken;
       }
 
       const response = await fetch(`/api/search?${params}`, { headers });
@@ -938,7 +923,7 @@ export default function SearchPage() {
   ].filter(Boolean);
 
   const atlassianConnected = !!atlassianConfig || atlassianAuth.connected;
-  const mattermostConnected = !!(atlassianConfig?.mattermostUrl && atlassianConfig?.mattermostToken);
+  const mattermostConnected = mattermost.connected;
   const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
 
   return (
@@ -1084,6 +1069,7 @@ export default function SearchPage() {
         atlassianConfig={atlassianConfig}
         atlassianAuth={atlassianAuth}
         google={google}
+        mattermost={mattermost}
         onClose={() => setActiveDrawer(null)}
         onAtlassianSave={handleAtlassianSave}
       />

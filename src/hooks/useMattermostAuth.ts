@@ -64,33 +64,27 @@ export function useMattermostAuth() {
     setTimeout(() => setLoading(false), 60000);
   }, [clientId, baseUrl, hasClientId, handleMessage]);
 
-  // 이메일/비밀번호 직접 로그인
+  // 이메일/비밀번호 직접 로그인 (서버 프록시를 통해 CORS 우회)
   const loginWithCredentials = useCallback(async (
     serverUrl: string,
     loginId: string,
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const cleanUrl = serverUrl.replace(/\/$/, '');
-      const res = await fetch(`${cleanUrl}/api/v4/users/login`, {
+      const res = await fetch('/api/auth/mattermost/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login_id: loginId, password }),
+        body: JSON.stringify({ serverUrl, loginId, password }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        return { success: false, error: data.message || `로그인 실패 (${res.status})` };
+        return { success: false, error: data.error || '로그인에 실패했습니다.' };
       }
 
-      const token = res.headers.get('Token');
-      if (!token) {
-        return { success: false, error: '토큰을 받지 못했습니다.' };
-      }
-
-      // 수동 로그인 토큰은 만료 기간을 30일로 설정 (Mattermost 기본값과 동일)
       const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
-      localStorage.setItem(MATTERMOST_TOKEN_KEY, token);
+      localStorage.setItem(MATTERMOST_TOKEN_KEY, data.token);
       localStorage.setItem(MATTERMOST_EXPIRY_KEY, expiresAt.toString());
       setConnected(true);
       return { success: true };

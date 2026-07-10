@@ -437,35 +437,45 @@ interface MattermostDrawerProps {
   hasClientId: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
+  onLoginWithCredentials: (serverUrl: string, loginId: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  defaultServerUrl?: string;
 }
 
-function MattermostDrawerContent({ connected, loading, hasClientId, onConnect, onDisconnect }: MattermostDrawerProps) {
-  if (!hasClientId) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-amber-800 mb-2">관리자 설정이 필요합니다</p>
-        <p className="text-xs text-amber-700 leading-relaxed">
-          Mattermost 통합 메뉴에서 OAuth 2.0 앱을 등록하고,{' '}
-          <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_MATTERMOST_URL</code>,{' '}
-          <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_MATTERMOST_CLIENT_ID</code> 환경변수를 설정해주세요.
-        </p>
-      </div>
-    );
-  }
+function MattermostDrawerContent({
+  connected,
+  loading,
+  hasClientId,
+  onConnect,
+  onDisconnect,
+  onLoginWithCredentials,
+  defaultServerUrl,
+}: MattermostDrawerProps) {
+  const [serverUrl, setServerUrl] = useState(defaultServerUrl ?? '');
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
+  const [credLoading, setCredLoading] = useState(false);
+  const [credError, setCredError] = useState('');
+
+  const handleCredLogin = async () => {
+    if (!serverUrl || !loginId || !password) {
+      setCredError('서버 주소, 아이디, 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+    setCredLoading(true);
+    setCredError('');
+    const result = await onLoginWithCredentials(serverUrl, loginId, password);
+    if (!result.success) {
+      setCredError(result.error ?? '로그인에 실패했습니다.');
+    }
+    setCredLoading(false);
+  };
 
   if (connected) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8l4 4 6-6" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">Mattermost 연결됨</p>
-            <p className="text-xs text-gray-500">채팅 대화를 검색할 수 있습니다</p>
-          </div>
+      <div className="space-y-3">
+        <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+          <p className="text-sm font-medium text-gray-800">Mattermost 연결됨</p>
+          <p className="text-xs text-gray-500 mt-0.5">채팅 대화를 검색할 수 있습니다.</p>
         </div>
         <button
           onClick={onDisconnect}
@@ -478,20 +488,76 @@ function MattermostDrawerContent({ connected, loading, hasClientId, onConnect, o
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-gray-500 leading-relaxed">
-        사내 메신저(Mattermost) 계정으로 로그인하여 소속된 팀의 대화 내용을 통합 검색할 수 있습니다.
-      </p>
-      <button
-        onClick={onConnect}
-        disabled={loading}
-        className="w-full h-10 flex items-center justify-center gap-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </svg>
-        {loading ? '연결 중...' : 'Mattermost 계정으로 연결'}
-      </button>
+    <div className="space-y-5">
+      {/* OAuth 간편 로그인 */}
+      {hasClientId && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-600">간편 로그인</p>
+          <button
+            onClick={onConnect}
+            disabled={loading}
+            className="w-full h-9 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '연결 중...' : 'Mattermost 계정으로 연결'}
+          </button>
+        </div>
+      )}
+
+      {/* 구분선 */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400">{hasClientId ? '또는' : '로그인'}</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
+
+      {/* 수동 로그인 */}
+      <div className="space-y-3">
+        <p className="text-xs font-medium text-gray-600">이메일 / 비밀번호로 로그인</p>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">서버 주소</label>
+          <input
+            type="url"
+            value={serverUrl}
+            onChange={(e) => setServerUrl(e.target.value)}
+            placeholder="https://mattermost.company.com"
+            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">이메일 또는 아이디</label>
+          <input
+            type="text"
+            value={loginId}
+            onChange={(e) => setLoginId(e.target.value)}
+            placeholder="user@company.com"
+            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">비밀번호</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCredLogin()}
+            placeholder="비밀번호"
+            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+        {credError && (
+          <p className="text-xs text-red-600">{credError}</p>
+        )}
+        <button
+          onClick={handleCredLogin}
+          disabled={credLoading}
+          className="w-full h-9 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          {credLoading ? '로그인 중...' : '로그인'}
+        </button>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          SSO(구글 계정 등)로 접속하는 경우 이 방식은 동작하지 않습니다.
+        </p>
+      </div>
     </div>
   );
 }
@@ -590,6 +656,8 @@ function Drawer({ open, type, atlassianConfig, atlassianAuth, google, mattermost
                   hasClientId={mattermost.hasClientId}
                   onConnect={mattermost.connect}
                   onDisconnect={mattermost.disconnect}
+                  onLoginWithCredentials={mattermost.loginWithCredentials}
+                  defaultServerUrl={mattermost.baseUrl}
                 />
               )}
             </div>

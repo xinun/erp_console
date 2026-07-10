@@ -44,18 +44,14 @@ export function useMattermostAuth() {
     }
   }, []);
 
+  // OAuth 2.0 팝업 로그인
   const connect = useCallback(() => {
-    if (!hasClientId) {
-      alert(
-        'Mattermost OAuth Client ID 또는 URL이 설정되지 않았습니다.\\n관리자에게 문의하여 환경변수를 설정해주세요.'
-      );
-      return;
-    }
+    if (!hasClientId) return;
     setLoading(true);
     window.addEventListener('message', handleMessage);
 
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/auth/mattermost/callback`);
-    const cleanUrl = baseUrl.replace(/\\/$/, '');
+    const cleanUrl = (baseUrl as string).replace(/\/$/, '');
     const authUrl = `${cleanUrl}/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${Date.now()}`;
 
     const width = 500;
@@ -64,13 +60,44 @@ export function useMattermostAuth() {
     const top = window.screen.height / 2 - height / 2;
     window.open(authUrl, 'MattermostAuth', `width=${width},height=${height},top=${top},left=${left}`);
 
-    // Clean up if window gets closed without messaging back
-    setTimeout(() => {
-      // Not a perfect check, but helps reset loading state
-      setLoading(false);
-    }, 60000);
-
+    // 60초 후 로딩 상태 초기화 (팝업 닫힘 감지 불가 시 대비)
+    setTimeout(() => setLoading(false), 60000);
   }, [clientId, baseUrl, hasClientId, handleMessage]);
+
+  // 이메일/비밀번호 직접 로그인
+  const loginWithCredentials = useCallback(async (
+    serverUrl: string,
+    loginId: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const cleanUrl = serverUrl.replace(/\/$/, '');
+      const res = await fetch(`${cleanUrl}/api/v4/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login_id: loginId, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return { success: false, error: data.message || `로그인 실패 (${res.status})` };
+      }
+
+      const token = res.headers.get('Token');
+      if (!token) {
+        return { success: false, error: '토큰을 받지 못했습니다.' };
+      }
+
+      // 수동 로그인 토큰은 만료 기간을 30일로 설정 (Mattermost 기본값과 동일)
+      const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      localStorage.setItem(MATTERMOST_TOKEN_KEY, token);
+      localStorage.setItem(MATTERMOST_EXPIRY_KEY, expiresAt.toString());
+      setConnected(true);
+      return { success: true };
+    } catch {
+      return { success: false, error: '서버에 연결할 수 없습니다.' };
+    }
+  }, []);
 
   const disconnect = useCallback(() => {
     localStorage.removeItem(MATTERMOST_TOKEN_KEY);
@@ -94,6 +121,7 @@ export function useMattermostAuth() {
     loading,
     hasClientId,
     connect,
+    loginWithCredentials,
     disconnect,
     getToken,
     baseUrl,

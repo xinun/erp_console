@@ -856,7 +856,7 @@ export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [counts, setCounts] = useState({ jira: 0, confluence: 0, drive: 0 });
+  const [counts, setCounts] = useState({ jira: 0, confluence: 0, drive: 0, mattermost: 0 });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);

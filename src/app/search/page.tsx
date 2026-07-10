@@ -16,7 +16,7 @@ const CONFIG_KEY = 'mantech_search_config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type DrawerType = 'atlassian' | 'google' | 'jsm' | null;
+type DrawerType = 'atlassian' | 'google' | 'jsm' | 'mattermost' | null;
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +103,7 @@ function SourceBadge({ source, fileType }: { source: SearchSource; fileType?: st
     jira: { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', label: 'Jira' },
     confluence: { bg: '#F5F3FF', text: '#5B21B6', border: '#DDD6FE', label: 'Confluence' },
     drive: { bg: '#F0FDF4', text: '#166534', border: '#BBF7D0', label: fileType ?? 'Drive' },
+    mattermost: { bg: '#FFF1F2', text: '#BE123C', border: '#FECDD3', label: 'Mattermost' },
   };
   const s = styles[source];
   return (
@@ -126,6 +127,8 @@ function ResultCard({ result }: { result: SearchResult }) {
     if (result.project) meta.push(result.project);
   } else if (result.source === 'confluence') {
     if (result.space) meta.push(result.space);
+  } else if (result.source === 'mattermost') {
+    if (result.team) meta.push(result.team);
   }
   if (result.author) meta.push(result.author);
   if (result.date) meta.push(formatDate(result.date));
@@ -425,6 +428,103 @@ function GoogleDrawerContent({ connected, email, loading, hasClientId, onConnect
   );
 }
 
+// ─── Mattermost Drawer Content ────────────────────────────────────────────────
+
+interface MattermostDrawerProps {
+  initialConfig: SearchConfig | null;
+  onSave: (config: SearchConfig) => void;
+}
+
+function MattermostDrawerContent({ initialConfig, onSave }: MattermostDrawerProps) {
+  const [baseUrl, setBaseUrl] = useState(initialConfig?.mattermostUrl ?? '');
+  const [token, setToken] = useState(initialConfig?.mattermostToken ?? '');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifySuccess, setVerifySuccess] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  const handleVerify = async () => {
+    if (!baseUrl || !token) {
+      setVerifyError('서버 주소와 토큰을 모두 입력해주세요.');
+      return;
+    }
+    setIsVerifying(true);
+    setVerifyError(null);
+    setVerifySuccess(null);
+    try {
+      const cleanUrl = baseUrl.replace(/\/$/, '');
+      const res = await fetch(`${cleanUrl}/api/v4/users/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('인증 실패');
+      const data = await res.json();
+      setVerifySuccess(`${data.username} 계정으로 연결되었습니다.`);
+    } catch {
+      setVerifyError('연결에 실패했습니다. 주소와 토큰을 확인해주세요.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleSave = () => {
+    const config = initialConfig || { jiraBaseUrl: '', jiraEmail: '', jiraToken: '' };
+    onSave({ ...config, mattermostUrl: baseUrl, mattermostToken: token });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1.5">서버 주소</label>
+          <input
+            type="url"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://mattermost.your-company.com"
+            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1.5">개인용 액세스 토큰 (PAT)</label>
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Mattermost 토큰을 입력하세요"
+            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+          />
+        </div>
+      </div>
+      
+      {verifyError && (
+        <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-xs text-red-600">{verifyError}</p>
+        </div>
+      )}
+      {verifySuccess && (
+        <div className="px-3 py-2.5 bg-green-50 border border-green-200 rounded-md">
+          <p className="text-xs text-green-600">{verifySuccess}</p>
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={handleVerify}
+          disabled={isVerifying}
+          className="h-9 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          {isVerifying ? '확인 중...' : '연결 테스트'}
+        </button>
+        <button
+          onClick={handleSave}
+          className="flex-1 h-9 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Drawer (slide-over panel) ────────────────────────────────────────────────
 
 interface DrawerProps {
@@ -441,12 +541,14 @@ const DRAWER_TITLES: Record<NonNullable<DrawerType>, string> = {
   atlassian: 'Jira / Confluence 연결',
   google: 'Google Workspace 연결',
   jsm: '고객사 JSM 연결',
+  mattermost: 'Mattermost 연결',
 };
 
 const DRAWER_DESCS: Record<NonNullable<DrawerType>, string> = {
   atlassian: 'Jira 이슈, Confluence 페이지를 검색합니다.',
   google: 'Drive, Docs, Sheets, Slides 파일을 검색합니다.',
   jsm: '고객사 JSM의 문의 내역을 검색합니다.',
+  mattermost: '사내 메신저 채팅 대화를 검색합니다.',
 };
 
 function Drawer({ open, type, atlassianConfig, atlassianAuth, google, onClose, onAtlassianSave }: DrawerProps) {
@@ -509,6 +611,12 @@ function Drawer({ open, type, atlassianConfig, atlassianAuth, google, onClose, o
                   </p>
                 </div>
               )}
+              {type === 'mattermost' && (
+                <MattermostDrawerContent
+                  initialConfig={atlassianConfig}
+                  onSave={onAtlassianSave}
+                />
+              )}
             </div>
           </>
         )}
@@ -529,6 +637,7 @@ interface ServiceGroup {
 interface SidebarProps {
   atlassianConnected: boolean;
   googleConnected: boolean;
+  mattermostConnected: boolean;
   filters: SearchFilters;
   onFiltersChange: (f: SearchFilters) => void;
   onServiceClick: (drawer: DrawerType) => void;
@@ -537,6 +646,7 @@ interface SidebarProps {
 function Sidebar({
   atlassianConnected,
   googleConnected,
+  mattermostConnected,
   filters,
   onFiltersChange,
   onServiceClick,
@@ -570,6 +680,14 @@ function Sidebar({
       ],
       connected: googleConnected,
     },
+    {
+      groupLabel: 'Messenger',
+      drawerType: 'mattermost',
+      services: [
+        { name: 'Mattermost', desc: '사내 메신저' },
+      ],
+      connected: mattermostConnected,
+    },
   ];
 
   const toggleSource = (source: SearchSource) => {
@@ -588,6 +706,7 @@ function Sidebar({
     { value: 'jira', label: 'Jira', available: atlassianConnected },
     { value: 'confluence', label: 'Confluence', available: atlassianConnected },
     { value: 'drive', label: 'Google Drive', available: googleConnected },
+    { value: 'mattermost', label: 'Mattermost', available: mattermostConnected },
   ];
 
   const dateOptions: { value: DateRange; label: string }[] = [
@@ -742,14 +861,16 @@ export default function SearchPage() {
     setSubmittedQuery(q);
     setErrors({});
     setResults([]);
-    setCounts({ jira: 0, confluence: 0, drive: 0 });
+    setCounts({ jira: 0, confluence: 0, drive: 0, mattermost: 0 });
 
     try {
       const jiraSources = filters.sources.filter((s) => s === 'jira' || s === 'confluence');
       const driveSources = filters.sources.filter((s) => s === 'drive');
+      const mmSources = filters.sources.filter((s) => s === 'mattermost');
       const activeSources = [
         ...(atlassianConnected ? jiraSources : []),
         ...(google.connected ? driveSources : []),
+        ...(mattermostConnected ? mmSources : []),
       ];
 
       if (activeSources.length === 0) {
@@ -781,6 +902,11 @@ export default function SearchPage() {
       const googleToken = google.getToken();
       if (googleToken) headers['x-google-token'] = googleToken;
 
+      if (atlassianConfig?.mattermostUrl && atlassianConfig?.mattermostToken) {
+        headers['x-mattermost-url'] = atlassianConfig.mattermostUrl;
+        headers['x-mattermost-token'] = atlassianConfig.mattermostToken;
+      }
+
       const response = await fetch(`/api/search?${params}`, { headers });
       const data = await response.json();
 
@@ -790,7 +916,7 @@ export default function SearchPage() {
       }
 
       setResults(data.results ?? []);
-      setCounts(data.counts ?? { jira: 0, confluence: 0, drive: 0 });
+      setCounts(data.counts ?? { jira: 0, confluence: 0, drive: 0, mattermost: 0 });
       setErrors(data.errors ?? {});
     } catch {
       setErrors({ global: '서버 연결에 실패했습니다.' });
@@ -803,15 +929,17 @@ export default function SearchPage() {
     if (e.key === 'Enter') handleSearch();
   };
 
-  const totalCount = counts.jira + counts.confluence + counts.drive;
+  const totalCount = counts.jira + counts.confluence + counts.drive + (counts.mattermost || 0);
   const countSummary = [
     counts.jira > 0 ? `Jira ${counts.jira}` : null,
     counts.confluence > 0 ? `Confluence ${counts.confluence}` : null,
     counts.drive > 0 ? `Drive ${counts.drive}` : null,
+    (counts.mattermost || 0) > 0 ? `Mattermost ${counts.mattermost}` : null,
   ].filter(Boolean);
 
   const atlassianConnected = !!atlassianConfig || atlassianAuth.connected;
-  const hasAnyConnection = atlassianConnected || google.connected;
+  const mattermostConnected = !!(atlassianConfig?.mattermostUrl && atlassianConfig?.mattermostToken);
+  const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
 
   return (
     <div className="h-full flex flex-col">
@@ -837,6 +965,7 @@ export default function SearchPage() {
         <Sidebar
           atlassianConnected={atlassianConnected}
           googleConnected={google.connected}
+          mattermostConnected={mattermostConnected}
           filters={filters}
           onFiltersChange={setFilters}
           onServiceClick={setActiveDrawer}

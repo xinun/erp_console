@@ -2,9 +2,11 @@ export interface SearchConfig {
   jiraBaseUrl: string;
   jiraEmail: string;
   jiraToken: string;
+  mattermostUrl?: string;
+  mattermostToken?: string;
 }
 
-export type SearchSource = 'jira' | 'confluence' | 'drive';
+export type SearchSource = 'jira' | 'confluence' | 'drive' | 'mattermost';
 
 export interface SearchResult {
   id: string;
@@ -25,12 +27,16 @@ export interface SearchResult {
   // Drive specific
   fileType?: string;
   mimeType?: string;
+  // Mattermost specific
+  team?: string;
+  channelName?: string;
 }
 
 export interface SearchCounts {
   jira: number;
   confluence: number;
   drive: number;
+  mattermost: number;
 }
 
 export interface SearchResponse {

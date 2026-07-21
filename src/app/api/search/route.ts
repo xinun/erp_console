@@ -70,10 +70,13 @@ type AtlassianAuthConfig =
 async function searchJira(
   q: string,
   authConfig: AtlassianAuthConfig,
-  dateRange: DateRange
+  dateRange: DateRange,
+  projectKey?: string,
+  source: 'jira' | 'jsm' = 'jira'
 ): Promise<SearchResult[]> {
   const safeQ = q.replace(/"/g, '\\"').split(/\s+/).filter(Boolean).map(t => `${t}*`).join(' ');
-  const jql = `text~"${safeQ}"${getJiraDateFilter(dateRange)} ORDER BY updated DESC`;
+  const projectFilter = projectKey ? `project="${projectKey.replace(/"/g, '')}" AND ` : '';
+  const jql = `${projectFilter}text~"${safeQ}"${getJiraDateFilter(dateRange)} ORDER BY updated DESC`;
 
   const params = new URLSearchParams({
     jql,
@@ -109,7 +112,7 @@ async function searchJira(
 
     return {
       id: issue.id as string,
-      source: 'jira' as const,
+      source,
       title: fields.summary as string,
       snippet: extractAdfText(fields.description),
       url: `${authConfig.baseUrl}/browse/${issue.key}`,
@@ -241,7 +244,7 @@ export async function GET(request: NextRequest) {
   const dateRange = (searchParams.get('dateRange') as DateRange) ?? 'all';
 
   if (!q) {
-    return Response.json({ results: [], counts: { jira: 0, confluence: 0, drive: 0, mattermost: 0 }, errors: {} });
+    return Response.json({ results: [], counts: { jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 }, errors: {} });
   }
 
   const sources = sourcesParam ? sourcesParam.split(',') : ['jira', 'confluence'];
@@ -255,16 +258,17 @@ export async function GET(request: NextRequest) {
   const atlassianOAuthToken = request.headers.get('x-atlassian-oauth-token');
   const atlassianCloudId = request.headers.get('x-atlassian-cloud-id');
   const atlassianSiteUrl = request.headers.get('x-atlassian-site-url');
+  const jiraProjectKey = request.headers.get('x-jira-project-key') ?? undefined;
 
   const googleToken = request.headers.get('x-google-token');
   
   const errors: Record<string, string> = {};
   const allResults: SearchResult[] = [];
-  const counts = { jira: 0, confluence: 0, drive: 0, mattermost: 0 };
+  const counts = { jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 };
 
   const tasks: Promise<void>[] = [];
 
-  const needsAtlassianAuth = sources.includes('jira') || sources.includes('confluence');
+  const needsAtlassianAuth = sources.includes('jira') || sources.includes('confluence') || sources.includes('jsm');
   let atlassianConfig: AtlassianAuthConfig | null = null;
 
   if (needsAtlassianAuth) {
@@ -295,6 +299,14 @@ export async function GET(request: NextRequest) {
       searchJira(q, atlassianConfig, dateRange)
         .then((r) => { allResults.push(...r); counts.jira = r.length; })
         .catch((e: Error) => { errors.jira = e.message; })
+    );
+  }
+
+  if (sources.includes('jsm') && atlassianConfig) {
+    tasks.push(
+      searchJira(q, atlassianConfig, dateRange, jiraProjectKey, 'jsm')
+        .then((r) => { allResults.push(...r); counts.jsm = r.length; })
+        .catch((e: Error) => { errors.jsm = e.message; })
     );
   }
 

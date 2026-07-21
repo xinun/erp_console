@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-const ATLASSIAN_TOKEN_KEY = 'atlassian_access_token';
-const ATLASSIAN_EXPIRY_KEY = 'atlassian_token_expiry';
-const ATLASSIAN_RESOURCES_KEY = 'atlassian_resources';
+const CONNECTIONS_KEY = 'mantech_atlassian_connections';
+const PENDING_KEY = 'mantech_atlassian_pending_connection';
+const STATE_KEY = 'mantech_atlassian_oauth_state';
+
+export type AtlassianConnectionKind = 'workspace' | 'jsm';
 
 export interface AtlassianResource {
   id: string;
@@ -13,37 +15,50 @@ export interface AtlassianResource {
   avatarUrl: string;
 }
 
-export interface AtlassianAuthState {
-  connected: boolean;
-  loading: boolean;
-  resources: AtlassianResource[];
-  hasClientId: boolean;
-  connect: () => void;
-  disconnect: () => void;
-  getToken: () => string | null;
-  getPrimaryResource: () => AtlassianResource | null;
+export interface AtlassianConnection {
+  id: string;
+  label: string;
+  kind: AtlassianConnectionKind;
+  projectKey?: string;
+  resource: AtlassianResource;
+  accessToken: string;
+  expiresAt: number;
 }
 
-export function useAtlassianAuth(): AtlassianAuthState {
-  const [connected, setConnected] = useState(false);
+export interface NewAtlassianConnection {
+  label: string;
+  kind: AtlassianConnectionKind;
+  siteUrl: string;
+  projectKey?: string;
+}
+
+function readConnections(): AtlassianConnection[] {
+  try {
+    const stored = localStorage.getItem(CONNECTIONS_KEY);
+    if (!stored) return [];
+    return (JSON.parse(stored) as AtlassianConnection[]).filter(
+      (connection) => connection.expiresAt > Date.now()
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function useAtlassianAuth() {
+  const [connections, setConnections] = useState<AtlassianConnection[]>([]);
   const [loading, setLoading] = useState(false);
-  const [resources, setResources] = useState<AtlassianResource[]>([]);
   const clientId = process.env.NEXT_PUBLIC_ATLASSIAN_CLIENT_ID ?? '';
 
+  const saveConnections = useCallback((next: AtlassianConnection[]) => {
+    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(next));
+    setConnections(next);
+  }, []);
+
   useEffect(() => {
-    const token = localStorage.getItem(ATLASSIAN_TOKEN_KEY);
-    const expiry = localStorage.getItem(ATLASSIAN_EXPIRY_KEY);
-    const storedRes = localStorage.getItem(ATLASSIAN_RESOURCES_KEY);
-    if (token && expiry && Number(expiry) > Date.now()) {
-      setConnected(true);
-      if (storedRes) {
-        try {
-          setResources(JSON.parse(storedRes));
-        } catch {
-          // ignore
-        }
-      }
-    }
+    const stored = readConnections();
+    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(stored));
+    const timeoutId = window.setTimeout(() => setConnections(stored), 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -51,73 +66,96 @@ export function useAtlassianAuth(): AtlassianAuthState {
     const data = event.data;
 
     if (data?.type === 'ATLASSIAN_AUTH_SUCCESS') {
-      const { access_token, expires_at, resources: resList } = data.payload;
-      localStorage.setItem(ATLASSIAN_TOKEN_KEY, access_token);
-      localStorage.setItem(ATLASSIAN_EXPIRY_KEY, String(expires_at));
-      localStorage.setItem(ATLASSIAN_RESOURCES_KEY, JSON.stringify(resList));
-      setResources(resList);
-      setConnected(true);
+      const expectedState = sessionStorage.getItem(STATE_KEY);
+      const pendingRaw = sessionStorage.getItem(PENDING_KEY);
+      const { access_token, expires_at, resources, state } = data.payload;
+      if (!expectedState || state !== expectedState || !pendingRaw) {
+        setLoading(false);
+        alert('Atlassian 연결 오류: 인증 상태를 확인할 수 없습니다.');
+        return;
+      }
+
+      const pending = JSON.parse(pendingRaw) as NewAtlassianConnection;
+      const expectedHost = new URL(pending.siteUrl).hostname;
+      const resource = (resources as AtlassianResource[]).find(
+        (item) => new URL(item.url).hostname === expectedHost
+      );
+
+      sessionStorage.removeItem(STATE_KEY);
+      sessionStorage.removeItem(PENDING_KEY);
+      if (!resource) {
+        setLoading(false);
+        alert(`로그인한 계정에서 ${expectedHost} 사이트를 찾지 못했습니다. 올바른 Atlassian 계정으로 다시 로그인해주세요.`);
+        return;
+      }
+
+      const nextConnection: AtlassianConnection = {
+        id: crypto.randomUUID(),
+        label: pending.label,
+        kind: pending.kind,
+        projectKey: pending.projectKey?.trim().toUpperCase(),
+        resource,
+        accessToken: access_token,
+        expiresAt: expires_at,
+      };
+      const next = [...readConnections(), nextConnection];
+      localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(next));
+      setConnections(next);
       setLoading(false);
-      window.removeEventListener('message', handleMessage);
     } else if (data?.type === 'ATLASSIAN_AUTH_ERROR') {
-      alert(`Atlassian 연결 오류: ${data.error}`);
       setLoading(false);
-      window.removeEventListener('message', handleMessage);
+      alert(`Atlassian 연결 오류: ${data.error}`);
     }
   }, []);
 
-  const connect = useCallback(() => {
-    if (!clientId) {
-      alert(
-        'Atlassian OAuth Client ID가 설정되지 않았습니다.\n관리자에게 문의하여 환경변수를 설정해주세요.'
-      );
-      return;
+  useEffect(() => {
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleMessage]);
+
+  const connect = useCallback((options: NewAtlassianConnection): string | null => {
+    if (!clientId) return 'Atlassian OAuth Client ID가 설정되지 않았습니다.';
+    if (!options.label.trim()) return '연결 이름을 입력해주세요.';
+    try {
+      const siteUrl = new URL(options.siteUrl.trim());
+      if (siteUrl.protocol !== 'https:') return 'Atlassian 사이트는 HTTPS 주소여야 합니다.';
+    } catch {
+      return '올바른 Atlassian 사이트 주소를 입력해주세요.';
     }
+    if (options.kind === 'jsm' && !options.projectKey?.trim()) return 'JSM 프로젝트 키를 입력해주세요.';
+
     setLoading(true);
     window.addEventListener('message', handleMessage);
-
+    const state = crypto.randomUUID();
+    sessionStorage.setItem(STATE_KEY, state);
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify(options));
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/auth/atlassian/callback`);
-    const scopes = encodeURIComponent('read:jira-work read:confluence-content.all search:confluence read:me offline_access');
-    const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${Date.now()}&response_type=code&prompt=consent`;
-
-    const width = 500;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    window.open(authUrl, 'AtlassianAuth', `width=${width},height=${height},top=${top},left=${left}`);
-
-    // If popup is closed by user without finishing
-    const checkClosed = setInterval(() => {
-      // It's hard to reliably detect popup close cross-origin, so we rely on the message.
-      // Alternatively, could track the window reference.
-    }, 1000);
-
+    const scopes = encodeURIComponent('read:jira-work read:confluence-content.all search:confluence read:servicedesk-request read:me offline_access');
+    const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${encodeURIComponent(state)}&response_type=code&prompt=consent`;
+    const popup = window.open(authUrl, 'AtlassianAuth', 'width=500,height=700');
+    if (!popup) {
+      setLoading(false);
+      return '팝업이 차단되었습니다.';
+    }
+    return null;
   }, [clientId, handleMessage]);
 
-  const disconnect = useCallback(() => {
-    localStorage.removeItem(ATLASSIAN_TOKEN_KEY);
-    localStorage.removeItem(ATLASSIAN_EXPIRY_KEY);
-    localStorage.removeItem(ATLASSIAN_RESOURCES_KEY);
-    setConnected(false);
-    setResources([]);
-  }, []);
+  const disconnect = useCallback((id?: string) => {
+    const next = id ? readConnections().filter((connection) => connection.id !== id) : [];
+    saveConnections(next);
+  }, [saveConnections]);
 
-  const getToken = useCallback((): string | null => {
-    const token = localStorage.getItem(ATLASSIAN_TOKEN_KEY);
-    const expiry = localStorage.getItem(ATLASSIAN_EXPIRY_KEY);
-    if (!token || !expiry || Number(expiry) <= Date.now()) {
-      if (connected) disconnect();
-      return null;
-    }
-    return token;
-  }, [connected, disconnect]);
+  const getConnections = useCallback((kind?: AtlassianConnectionKind) => {
+    const valid = connections.filter((connection) => connection.expiresAt > Date.now());
+    return kind ? valid.filter((connection) => connection.kind === kind) : valid;
+  }, [connections]);
 
-  const getPrimaryResource = useCallback((): AtlassianResource | null => {
-    if (!connected || resources.length === 0) return null;
-    // For simplicity, return the first available resource. 
-    // In a multi-tenant setup, you'd let the user pick.
-    return resources[0];
-  }, [connected, resources]);
-
-  return { connected, loading, resources, hasClientId: !!clientId, connect, disconnect, getToken, getPrimaryResource };
+  return {
+    connected: connections.length > 0,
+    loading,
+    connections,
+    hasClientId: !!clientId,
+    connect,
+    disconnect,
+    getConnections,
+  };
 }

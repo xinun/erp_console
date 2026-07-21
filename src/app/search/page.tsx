@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import type {
-  SearchConfig,
   SearchResult,
+  SearchResponse,
   SearchFilters,
   SearchSource,
   DateRange,
@@ -13,8 +12,6 @@ import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useAtlassianAuth } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
 import { searchMattermostFromBrowser } from '@/lib/mattermost';
-
-const CONFIG_KEY = 'mantech_search_config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,15 +48,6 @@ function IconClose() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
       <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconSettings() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M11.9 3.4l-.7.7M3.4 11.9l-.7.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -103,6 +91,7 @@ function StatusBadge({ connected }: { connected: boolean }) {
 function SourceBadge({ source, fileType }: { source: SearchSource; fileType?: string }) {
   const styles: Record<SearchSource, { bg: string; text: string; border: string; label: string }> = {
     jira: { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', label: 'Jira' },
+    jsm: { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA', label: '고객 문의' },
     confluence: { bg: '#F5F3FF', text: '#5B21B6', border: '#DDD6FE', label: 'Confluence' },
     drive: { bg: '#F0FDF4', text: '#166534', border: '#BBF7D0', label: fileType ?? 'Drive' },
     mattermost: { bg: '#FFF1F2', text: '#BE123C', border: '#FECDD3', label: 'Mattermost' },
@@ -122,7 +111,7 @@ function SourceBadge({ source, fileType }: { source: SearchSource; fileType?: st
 
 function ResultCard({ result }: { result: SearchResult }) {
   const meta: string[] = [];
-  if (result.source === 'jira') {
+  if (result.source === 'jira' || result.source === 'jsm') {
     if (result.key) meta.push(result.key);
     if (result.issueType) meta.push(result.issueType);
     if (result.status) meta.push(result.status);
@@ -180,178 +169,59 @@ function ResultCard({ result }: { result: SearchResult }) {
 // ─── Atlassian Drawer Content ─────────────────────────────────────────────────
 
 interface AtlassianDrawerProps {
-  initialConfig: SearchConfig | null;
-  onSave: (config: SearchConfig) => void;
+  kind: 'workspace' | 'jsm';
   atlassianAuth: ReturnType<typeof useAtlassianAuth>;
 }
 
-function AtlassianDrawerContent({ initialConfig, onSave, atlassianAuth }: AtlassianDrawerProps) {
-  const [form, setForm] = useState<SearchConfig>(
-    initialConfig ?? { jiraBaseUrl: '', jiraEmail: '', jiraToken: '' }
+function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
+  const isJsm = kind === 'jsm';
+  const [label, setLabel] = useState(isJsm ? '고객사 문의' : 'Mantech 문서·개발');
+  const [siteUrl, setSiteUrl] = useState(
+    isJsm ? 'https://mantech-accordion.atlassian.net' : 'https://mantech.jira.com'
   );
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verifyError, setVerifyError] = useState('');
-  const [verifySuccess, setVerifySuccess] = useState('');
+  const [projectKey, setProjectKey] = useState(isJsm ? 'LYUX' : '');
+  const [error, setError] = useState('');
+  const connections = atlassianAuth.getConnections(kind);
 
-  const handleChange = (field: keyof SearchConfig, value: string) => {
-    setForm((p) => ({ ...p, [field]: value }));
-    setVerifyError('');
-    setVerifySuccess('');
+  const handleConnect = () => {
+    setError(atlassianAuth.connect({ label, kind, siteUrl, projectKey }) ?? '');
   };
-
-  const handleVerify = async () => {
-    if (!form.jiraBaseUrl || !form.jiraEmail || !form.jiraToken) {
-      setVerifyError('모든 항목을 입력해주세요.');
-      return;
-    }
-    setIsVerifying(true);
-    setVerifyError('');
-    setVerifySuccess('');
-    try {
-      const res = await fetch('/api/search?q=test&sources=jira', {
-        headers: {
-          'x-jira-base-url': form.jiraBaseUrl,
-          'x-jira-email': form.jiraEmail,
-          'x-jira-token': form.jiraToken,
-        },
-      });
-      if (res.ok) {
-        setVerifySuccess('연결 성공!');
-      } else {
-        const d = await res.json();
-        setVerifyError(d.errors?.jira ?? d.error ?? '연결에 실패했습니다.');
-      }
-    } catch {
-      setVerifyError('서버에 연결할 수 없습니다.');
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const handleSave = () => {
-    if (!form.jiraBaseUrl || !form.jiraEmail || !form.jiraToken) {
-      setVerifyError('모든 항목을 입력해주세요.');
-      return;
-    }
-    const config = { ...form, jiraBaseUrl: form.jiraBaseUrl.replace(/\/$/, '') };
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-    onSave(config);
-    setVerifySuccess('저장되었습니다.');
-  };
-
-  const primaryRes = atlassianAuth.getPrimaryResource();
 
   return (
-    <div className="space-y-6">
-      {/* OAuth Section */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">간편 로그인 (권장)</h3>
-        {atlassianAuth.connected && primaryRes ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <img src={primaryRes.avatarUrl} alt="Avatar" className="w-8 h-8 rounded" />
-              <div>
-                <p className="text-sm font-medium text-gray-800">{primaryRes.name}</p>
-                <p className="text-xs text-gray-500">{primaryRes.url}</p>
-              </div>
-            </div>
-            <button
-              onClick={atlassianAuth.disconnect}
-              className="w-full h-9 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-            >
-              연결 해제
-            </button>
+    <div className="space-y-5">
+      {connections.map((connection) => (
+        <div key={connection.id} className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded bg-blue-100 text-xs font-semibold text-blue-700">
+            {connection.resource.name.slice(0, 1).toUpperCase()}
           </div>
-        ) : (
-          <button
-            onClick={atlassianAuth.connect}
-            disabled={atlassianAuth.loading || !atlassianAuth.hasClientId}
-            className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11.5 2L1 12.5H6.5V22H16.5V12.5H22L11.5 2Z" />
-            </svg>
-            {atlassianAuth.loading ? '연결 중...' : 'Atlassian(Jira) 계정으로 계속하기'}
-          </button>
-        )}
-      </div>
-
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-          <div className="w-full border-t border-gray-200"></div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-gray-800">{connection.label}</p>
+            <p className="truncate text-xs text-gray-500">{connection.resource.url}{connection.projectKey ? ` · ${connection.projectKey}` : ''}</p>
+          </div>
+          <button onClick={() => atlassianAuth.disconnect(connection.id)} className="text-xs text-gray-500 hover:text-red-600">삭제</button>
         </div>
-        <div className="relative flex justify-center">
-          <span className="px-2 bg-white text-xs text-gray-400">또는 수동으로 연결 (API Token)</span>
+      ))}
+      <div className="space-y-3 border-t border-gray-100 pt-4">
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">연결 이름</label>
+          <input value={label} onChange={(event) => setLabel(event.target.value)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm" />
         </div>
-      </div>
-
-      {/* Basic Auth Section */}
-      <div className="space-y-4 opacity-80 hover:opacity-100 transition-opacity">
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1.5">서버 주소</label>
-        <input
-          type="url"
-          value={form.jiraBaseUrl}
-          onChange={(e) => handleChange('jiraBaseUrl', e.target.value)}
-          placeholder="https://yourcompany.jira.com"
-          className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1.5">이메일 (회사 계정)</label>
-        <input
-          type="email"
-          value={form.jiraEmail}
-          onChange={(e) => handleChange('jiraEmail', e.target.value)}
-          placeholder="name@company.co.kr"
-          className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1.5">API Token</label>
-        <input
-          type="password"
-          value={form.jiraToken}
-          onChange={(e) => handleChange('jiraToken', e.target.value)}
-          placeholder="발급받은 API Token 입력"
-          className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        <a
-          href="https://id.atlassian.com/manage-profile/security/api-tokens"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-700"
-        >
-          API Token 발급 페이지 <IconExternalLink />
-        </a>
-      </div>
-
-      {verifyError && (
-        <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-xs text-red-600">{verifyError}</p>
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">Atlassian 사이트 주소</label>
+          <input type="url" value={siteUrl} onChange={(event) => setSiteUrl(event.target.value)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm" />
         </div>
-      )}
-      {verifySuccess && (
-        <div className="px-3 py-2.5 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-xs text-green-600">{verifySuccess}</p>
-        </div>
-      )}
-
-      <div className="flex gap-2 pt-1">
+        {isJsm && <div>
+          <label className="mb-1 block text-xs text-gray-500">JSM 프로젝트 키</label>
+          <input value={projectKey} onChange={(event) => setProjectKey(event.target.value)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm uppercase" />
+        </div>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
         <button
-          onClick={handleVerify}
-          disabled={isVerifying}
-          className="h-9 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+          onClick={handleConnect}
+          disabled={atlassianAuth.loading}
+          className="h-10 w-full rounded-md bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {isVerifying ? '확인 중...' : '연결 테스트'}
+          {atlassianAuth.loading ? '연결 중...' : isJsm ? '고객 문의 계정 연결' : '문서·개발 계정 연결'}
         </button>
-        <button
-          onClick={handleSave}
-          className="flex-1 h-9 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          저장
-        </button>
-      </div>
       </div>
     </div>
   );
@@ -522,12 +392,10 @@ function MattermostDrawerContent({
 interface DrawerProps {
   open: boolean;
   type: DrawerType;
-  atlassianConfig: SearchConfig | null;
   atlassianAuth: ReturnType<typeof useAtlassianAuth>;
   google: ReturnType<typeof useGoogleAuth>;
   mattermost: ReturnType<typeof useMattermostAuth>;
   onClose: () => void;
-  onAtlassianSave: (c: SearchConfig) => void;
 }
 
 const DRAWER_TITLES: Record<NonNullable<DrawerType>, string> = {
@@ -544,7 +412,7 @@ const DRAWER_DESCS: Record<NonNullable<DrawerType>, string> = {
   mattermost: '사내 메신저 채팅 대화를 검색합니다.',
 };
 
-function Drawer({ open, type, atlassianConfig, atlassianAuth, google, mattermost, onClose, onAtlassianSave }: DrawerProps) {
+function Drawer({ open, type, atlassianAuth, google, mattermost, onClose }: DrawerProps) {
   return (
     <>
       {/* Backdrop */}
@@ -579,10 +447,9 @@ function Drawer({ open, type, atlassianConfig, atlassianAuth, google, mattermost
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
-              {type === 'atlassian' && (
+              {(type === 'atlassian' || type === 'jsm') && (
                 <AtlassianDrawerContent
-                  initialConfig={atlassianConfig}
-                  onSave={onAtlassianSave}
+                  kind={type === 'jsm' ? 'jsm' : 'workspace'}
                   atlassianAuth={atlassianAuth}
                 />
               )}
@@ -595,14 +462,6 @@ function Drawer({ open, type, atlassianConfig, atlassianAuth, google, mattermost
                   onConnect={google.connect}
                   onDisconnect={google.disconnect}
                 />
-              )}
-              {type === 'jsm' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-2">
-                  <p className="text-sm font-medium text-blue-800 mb-2">현재 준비 중입니다</p>
-                  <p className="text-xs text-blue-700 leading-relaxed">
-                    고객사 JSM (mantech-accordion) 연동은 공용 계정 API 권한 확인 후 업데이트될 예정입니다.
-                  </p>
-                </div>
               )}
               {type === 'mattermost' && (
                 <MattermostDrawerContent
@@ -632,6 +491,7 @@ interface ServiceGroup {
 
 interface SidebarProps {
   atlassianConnected: boolean;
+  jsmConnected: boolean;
   googleConnected: boolean;
   mattermostConnected: boolean;
   filters: SearchFilters;
@@ -641,6 +501,7 @@ interface SidebarProps {
 
 function Sidebar({
   atlassianConnected,
+  jsmConnected,
   googleConnected,
   mattermostConnected,
   filters,
@@ -664,7 +525,7 @@ function Sidebar({
       services: [
         { name: '고객사 JSM', desc: '고객 문의 접수' },
       ],
-      connected: false,
+      connected: jsmConnected,
     },
     {
       groupLabel: 'Google Workspace',
@@ -687,9 +548,7 @@ function Sidebar({
     },
   ];
   const connectedGroups = groups.filter((group) => group.connected);
-  const availableGroups = groups.filter(
-    (group) => !group.connected && group.drawerType !== 'jsm'
-  );
+  const availableGroups = groups.filter((group) => !group.connected);
 
   const toggleSource = (source: SearchSource) => {
     const next = filters.sources.includes(source)
@@ -706,6 +565,7 @@ function Sidebar({
   const filterOptions: { value: SearchSource; label: string; available: boolean }[] = [
     { value: 'jira', label: 'Jira', available: atlassianConnected },
     { value: 'confluence', label: 'Confluence', available: atlassianConnected },
+    { value: 'jsm', label: '고객 문의', available: jsmConnected },
     { value: 'drive', label: 'Google Drive', available: googleConnected },
     { value: 'mattermost', label: 'Mattermost', available: mattermostConnected },
   ];
@@ -840,17 +700,16 @@ function Sidebar({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SearchPage() {
-  const router = useRouter();
   const google = useGoogleAuth();
   const atlassianAuth = useAtlassianAuth();
   const mattermost = useMattermostAuth();
 
-  const [atlassianConfig, setAtlassianConfig] = useState<SearchConfig | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerType>(null);
+  const [showProfile, setShowProfile] = useState(false);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [counts, setCounts] = useState({ jira: 0, confluence: 0, drive: 0, mattermost: 0 });
+  const [counts, setCounts] = useState({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -861,41 +720,17 @@ export default function SearchPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(CONFIG_KEY);
-    if (stored) {
-      setAtlassianConfig(JSON.parse(stored));
-    }
     inputRef.current?.focus();
   }, []);
-
-  // Google 연결 시 drive 소스 자동 추가
-  useEffect(() => {
-    if (google.connected && !filters.sources.includes('drive')) {
-      setFilters((p) => ({ ...p, sources: [...p.sources, 'drive'] }));
-    }
-  }, [google.connected]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Mattermost 연결 시 mattermost 소스 자동 추가
-  useEffect(() => {
-    if (mattermost.connected && !filters.sources.includes('mattermost')) {
-      setFilters((p) => ({ ...p, sources: [...p.sources, 'mattermost'] }));
-    }
-  }, [mattermost.connected]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleAtlassianSave = (config: SearchConfig) => {
-    setAtlassianConfig(config);
-    if (!filters.sources.includes('jira')) {
-      setFilters((p) => ({ ...p, sources: [...p.sources, 'jira', 'confluence'] }));
-    }
-  };
 
   const handleSearch = useCallback(async () => {
     const q = query.trim();
     if (!q) return;
 
-    const atlassianConnected = !!atlassianConfig || atlassianAuth.connected;
+    const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
+    const jsmConnected = atlassianAuth.getConnections('jsm').length > 0;
     const mattermostConnected = mattermost.connected;
-    const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
+    const hasAnyConnection = atlassianConnected || jsmConnected || google.connected || mattermostConnected;
     if (!hasAnyConnection) {
       setErrors({ global: '검색할 서비스가 없습니다. 왼쪽에서 서비스를 연결해주세요.' });
       setHasSearched(true);
@@ -907,14 +742,16 @@ export default function SearchPage() {
     setSubmittedQuery(q);
     setErrors({});
     setResults([]);
-    setCounts({ jira: 0, confluence: 0, drive: 0, mattermost: 0 });
+    setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
 
     try {
       const jiraSources = filters.sources.filter((s) => s === 'jira' || s === 'confluence');
+      const jsmSources = filters.sources.filter((s) => s === 'jsm');
       const driveSources = filters.sources.filter((s) => s === 'drive');
       const mmSources = filters.sources.filter((s) => s === 'mattermost');
       const activeSources = [
         ...(atlassianConnected ? jiraSources : []),
+        ...(jsmConnected ? jsmSources : []),
         ...(google.connected ? driveSources : []),
         ...(mattermostConnected ? mmSources : []),
       ];
@@ -925,72 +762,86 @@ export default function SearchPage() {
         return;
       }
 
-      const headers: Record<string, string> = {};
-      
-      const atlassianToken = atlassianAuth.getToken();
-      const atlassianRes = atlassianAuth.getPrimaryResource();
+      const requestSearch = async (sources: SearchSource[], headers: Record<string, string>): Promise<SearchResponse> => {
+        const response = await fetch(`/api/search?${new URLSearchParams({
+          q,
+          sources: sources.join(','),
+          dateRange: filters.dateRange,
+        })}`, { headers });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? '검색 중 오류가 발생했습니다.');
+        return data as SearchResponse;
+      };
 
-      if (atlassianToken && atlassianRes) {
-        headers['x-atlassian-oauth-token'] = atlassianToken;
-        headers['x-atlassian-cloud-id'] = atlassianRes.id;
-        headers['x-atlassian-site-url'] = atlassianRes.url;
-      } else if (atlassianConfig) {
-        headers['x-jira-base-url'] = atlassianConfig.jiraBaseUrl;
-        headers['x-jira-email'] = atlassianConfig.jiraEmail;
-        headers['x-jira-token'] = atlassianConfig.jiraToken;
+      const serverRequests: Promise<SearchResponse>[] = [];
+      if (jiraSources.length > 0) {
+        for (const connection of atlassianAuth.getConnections('workspace')) {
+          serverRequests.push(requestSearch(jiraSources, {
+            'x-atlassian-oauth-token': connection.accessToken,
+            'x-atlassian-cloud-id': connection.resource.id,
+            'x-atlassian-site-url': connection.resource.url,
+          }));
+        }
+      }
+      if (jsmSources.length > 0) {
+        for (const connection of atlassianAuth.getConnections('jsm')) {
+          serverRequests.push(requestSearch(['jsm'], {
+            'x-atlassian-oauth-token': connection.accessToken,
+            'x-atlassian-cloud-id': connection.resource.id,
+            'x-atlassian-site-url': connection.resource.url,
+            'x-jira-project-key': connection.projectKey ?? '',
+          }));
+        }
       }
       const googleToken = google.getToken();
-      if (googleToken) headers['x-google-token'] = googleToken;
-
-      const serverSources = activeSources.filter((source) => source !== 'mattermost');
-      const serverRequest = serverSources.length > 0
-        ? fetch(`/api/search?${new URLSearchParams({
-            q,
-            sources: serverSources.join(','),
-            dateRange: filters.dateRange,
-          })}`, { headers }).then(async (response) => {
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error ?? '검색 중 오류가 발생했습니다.');
-            return data;
-          })
-        : Promise.resolve({ results: [], counts: {}, errors: {} });
+      if (driveSources.length > 0 && googleToken) {
+        serverRequests.push(requestSearch(['drive'], { 'x-google-token': googleToken }));
+      }
 
       const mattermostToken = mattermost.getToken();
       const mattermostRequest = activeSources.includes('mattermost') && mattermostToken && mattermost.baseUrl
         ? searchMattermostFromBrowser(q, mattermost.baseUrl, mattermostToken)
         : Promise.resolve([]);
 
-      const [serverData, mattermostResults] = await Promise.all([serverRequest, mattermostRequest]);
-      setResults([...(serverData.results ?? []), ...mattermostResults]);
+      const [serverResults, mattermostResults] = await Promise.all([
+        Promise.all(serverRequests),
+        mattermostRequest,
+      ]);
+      const combinedResults = serverResults.flatMap((data) => data.results);
+      const combinedErrors = Object.assign({}, ...serverResults.map((data) => data.errors));
+      setResults([...combinedResults, ...mattermostResults]);
       setCounts({
-        jira: serverData.counts?.jira ?? 0,
-        confluence: serverData.counts?.confluence ?? 0,
-        drive: serverData.counts?.drive ?? 0,
+        jira: serverResults.reduce((sum, data) => sum + data.counts.jira, 0),
+        confluence: serverResults.reduce((sum, data) => sum + data.counts.confluence, 0),
+        jsm: serverResults.reduce((sum, data) => sum + data.counts.jsm, 0),
+        drive: serverResults.reduce((sum, data) => sum + data.counts.drive, 0),
         mattermost: mattermostResults.length,
       });
-      setErrors(serverData.errors ?? {});
+      setErrors(combinedErrors);
     } catch (error) {
       setErrors({ global: error instanceof Error ? error.message : '서비스 연결에 실패했습니다.' });
     } finally {
       setIsLoading(false);
     }
-  }, [query, atlassianConfig, filters, google, atlassianAuth, mattermost]);
+  }, [query, filters, google, atlassianAuth, mattermost]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') handleSearch();
   };
 
-  const totalCount = counts.jira + counts.confluence + counts.drive + (counts.mattermost || 0);
+  const totalCount = counts.jira + counts.confluence + counts.jsm + counts.drive + counts.mattermost;
   const countSummary = [
     counts.jira > 0 ? `Jira ${counts.jira}` : null,
     counts.confluence > 0 ? `Confluence ${counts.confluence}` : null,
+    counts.jsm > 0 ? `고객 문의 ${counts.jsm}` : null,
     counts.drive > 0 ? `Drive ${counts.drive}` : null,
     (counts.mattermost || 0) > 0 ? `Mattermost ${counts.mattermost}` : null,
   ].filter(Boolean);
 
-  const atlassianConnected = !!atlassianConfig || atlassianAuth.connected;
+  const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
+  const jsmConnected = atlassianAuth.getConnections('jsm').length > 0;
   const mattermostConnected = mattermost.connected;
-  const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
+  const hasAnyConnection = atlassianConnected || jsmConnected || google.connected || mattermostConnected;
 
   return (
     <div className="h-full flex flex-col">
@@ -1002,19 +853,50 @@ export default function SearchPage() {
           </div>
           <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
         </div>
-        <button
-          onClick={() => router.push('/setup')}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <IconSettings />
-          설정
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowProfile((current) => !current)}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-xs font-semibold text-white hover:bg-gray-700"
+            aria-label="사용자 프로필"
+          >
+            {(google.email || 'U').slice(0, 1).toUpperCase()}
+          </button>
+          {showProfile && (
+            <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+              <p className="text-sm font-semibold text-gray-800">내 프로필</p>
+              <p className="mt-0.5 truncate text-xs text-gray-500">{google.email || '이 브라우저의 사용자'}</p>
+              <div className="my-3 border-t border-gray-100" />
+              <p className="mb-2 text-xs font-medium text-gray-500">연결된 서비스</p>
+              <div className="space-y-1 text-xs text-gray-600">
+                <p>문서·개발 Atlassian {atlassianAuth.getConnections('workspace').length}개</p>
+                <p>고객 문의 JSM {atlassianAuth.getConnections('jsm').length}개</p>
+                <p>Google Drive {google.connected ? '연결됨' : '미연결'}</p>
+                <p>Mattermost {mattermost.connected ? '연결됨' : '미연결'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  atlassianAuth.disconnect();
+                  google.disconnect();
+                  mattermost.disconnect();
+                  setShowProfile(false);
+                }}
+                className="mt-3 w-full rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+              >
+                이 브라우저의 연결 정보 전체 삭제
+              </button>
+              <p className="mt-2 text-[11px] leading-relaxed text-gray-400">연결 정보는 현재 브라우저에만 저장됩니다.</p>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           atlassianConnected={atlassianConnected}
+          jsmConnected={jsmConnected}
           googleConnected={google.connected}
           mattermostConnected={mattermostConnected}
           filters={filters}
@@ -1084,6 +966,7 @@ export default function SearchPage() {
                     {errors.global && <p className="text-xs text-amber-700">{errors.global}</p>}
                     {errors.jira && <p className="text-xs text-amber-700">Jira: {errors.jira}</p>}
                     {errors.confluence && <p className="text-xs text-amber-700">Confluence: {errors.confluence}</p>}
+                    {errors.jsm && <p className="text-xs text-amber-700">고객 문의: {errors.jsm}</p>}
                     {errors.drive && <p className="text-xs text-amber-700">Google Drive: {errors.drive}</p>}
                   </div>
                 )}
@@ -1132,12 +1015,10 @@ export default function SearchPage() {
       <Drawer
         open={activeDrawer !== null}
         type={activeDrawer}
-        atlassianConfig={atlassianConfig}
         atlassianAuth={atlassianAuth}
         google={google}
         mattermost={mattermost}
         onClose={() => setActiveDrawer(null)}
-        onAtlassianSave={handleAtlassianSave}
       />
     </div>
   );

@@ -6,7 +6,7 @@ export interface SearchConfig {
   mattermostToken?: string;
 }
 
-export type SearchSource = 'jira' | 'confluence' | 'drive' | 'mattermost';
+export type SearchSource = 'jira' | 'confluence' | 'jsm' | 'drive' | 'mattermost';
 
 export interface SearchResult {
   id: string;
@@ -35,6 +35,7 @@ export interface SearchResult {
 export interface SearchCounts {
   jira: number;
   confluence: number;
+  jsm: number;
   drive: number;
   mattermost: number;
 }

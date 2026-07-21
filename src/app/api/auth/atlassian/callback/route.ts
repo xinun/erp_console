@@ -4,9 +4,10 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
+  const state = searchParams.get('state');
 
   // Popup에 띄울 HTML 응답을 생성하는 헬퍼 함수
-  const sendHtmlResponse = (messagePayload: any) => {
+  const sendHtmlResponse = (messagePayload: unknown) => {
     const html = `
       <!DOCTYPE html>
       <html>
@@ -91,15 +92,19 @@ export async function GET(request: NextRequest) {
         access_token,
         refresh_token,
         expires_at: Date.now() + expires_in * 1000,
-        resources: resources.map((r: any) => ({
-          id: r.id,
-          url: r.url,
-          name: r.name,
-          avatarUrl: r.avatarUrl,
-        })),
+        state,
+        resources: resources.map((resource: unknown) => {
+          const item = resource as Record<string, unknown>;
+          return {
+            id: String(item.id ?? ''),
+            url: String(item.url ?? ''),
+            name: String(item.name ?? ''),
+            avatarUrl: String(item.avatarUrl ?? ''),
+          };
+        }),
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Atlassian auth callback exception:', err);
     return sendHtmlResponse({ type: 'ATLASSIAN_AUTH_ERROR', error: 'Internal server error' });
   }

@@ -9,7 +9,7 @@ import type {
   DateRange,
 } from '@/lib/types';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
-import { useAtlassianAuth } from '@/hooks/useAtlassianAuth';
+import { useAtlassianAuth, type AtlassianConnection } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
 import { searchMattermostFromBrowser } from '@/lib/mattermost';
 
@@ -180,11 +180,12 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
     isJsm ? 'https://mantech-accordion.atlassian.net' : 'https://mantech.jira.com'
   );
   const [projectKey, setProjectKey] = useState(isJsm ? 'LYUX' : '');
+  const [jqlFilter, setJqlFilter] = useState(isJsm ? 'project = LYUX' : '');
   const [error, setError] = useState('');
-  const connections = atlassianAuth.getConnections(kind);
+  const connections = atlassianAuth.connections.filter((connection) => connection.kind === kind);
 
   const handleConnect = () => {
-    setError(atlassianAuth.connect({ label, kind, siteUrl, projectKey }) ?? '');
+    setError(atlassianAuth.connect({ label, kind, siteUrl, projectKey, jqlFilter }) ?? '');
   };
 
   return (
@@ -213,6 +214,17 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
         {isJsm && <div>
           <label className="mb-1 block text-xs text-gray-500">JSM 프로젝트 키</label>
           <input value={projectKey} onChange={(event) => setProjectKey(event.target.value)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm uppercase" />
+        </div>}
+        {isJsm && <div>
+          <label className="mb-1 block text-xs text-gray-500">문의 검색 범위(JQL)</label>
+          <textarea
+            value={jqlFilter}
+            onChange={(event) => setJqlFilter(event.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs"
+            placeholder="project = LYUX"
+          />
+          <p className="mt-1 text-[11px] text-gray-400">큐 34의 실제 JQL을 알고 있다면 여기에 입력하세요.</p>
         </div>}
         {error && <p className="text-xs text-red-600">{error}</p>}
         <button
@@ -492,6 +504,8 @@ interface ServiceGroup {
 interface SidebarProps {
   atlassianConnected: boolean;
   jsmConnected: boolean;
+  workspaceConnections: AtlassianConnection[];
+  jsmConnections: AtlassianConnection[];
   googleConnected: boolean;
   mattermostConnected: boolean;
   filters: SearchFilters;
@@ -502,6 +516,8 @@ interface SidebarProps {
 function Sidebar({
   atlassianConnected,
   jsmConnected,
+  workspaceConnections,
+  jsmConnections,
   googleConnected,
   mattermostConnected,
   filters,
@@ -511,20 +527,21 @@ function Sidebar({
   const [showAddMenu, setShowAddMenu] = useState(false);
   const groups: ServiceGroup[] = [
     {
-      groupLabel: 'Atlassian',
+      groupLabel: '문서·개발',
       drawerType: 'atlassian',
-      services: [
-        { name: 'Jira', desc: '이슈 추적' },
-        { name: 'Confluence', desc: '문서 관리' },
-      ],
+      services: workspaceConnections.map((connection) => ({
+        name: connection.label,
+        desc: connection.resource.url,
+      })),
       connected: atlassianConnected,
     },
     {
-      groupLabel: 'Customer Service',
+      groupLabel: '고객 문의',
       drawerType: 'jsm',
-      services: [
-        { name: '고객사 JSM', desc: '고객 문의 접수' },
-      ],
+      services: jsmConnections.map((connection) => ({
+        name: connection.label,
+        desc: `${connection.resource.name}${connection.projectKey ? ` · ${connection.projectKey}` : ''}`,
+      })),
       connected: jsmConnected,
     },
     {
@@ -596,6 +613,7 @@ function Sidebar({
                   >
                     <div className="min-w-0">
                       <span className="text-sm text-gray-700 block">{service.name}</span>
+                      <span className="block truncate text-[11px] text-gray-400">{service.desc}</span>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                       <StatusBadge connected={group.connected} />
@@ -637,7 +655,11 @@ function Sidebar({
                   className="w-full px-3 py-2.5 text-left hover:bg-gray-50"
                 >
                   <span className="block text-sm font-medium text-gray-700">{group.groupLabel}</span>
-                  <span className="block text-xs text-gray-400">{group.services.map((service) => service.name).join(', ')}</span>
+                  <span className="block text-xs text-gray-400">
+                    {group.services.length > 0
+                      ? group.services.map((service) => service.name).join(', ')
+                      : group.drawerType === 'atlassian' ? 'Jira, Confluence' : 'Jira Service Management'}
+                  </span>
                 </button>
               )) : (
                 <p className="px-3 py-3 text-xs text-gray-400">모든 서비스를 연결했습니다.</p>
@@ -773,29 +795,30 @@ export default function SearchPage() {
         return data as SearchResponse;
       };
 
-      const serverRequests: Promise<SearchResponse>[] = [];
+      const serverRequests: Array<{ label: string; request: Promise<SearchResponse> }> = [];
       if (jiraSources.length > 0) {
         for (const connection of atlassianAuth.getConnections('workspace')) {
-          serverRequests.push(requestSearch(jiraSources, {
+          serverRequests.push({ label: connection.label, request: requestSearch(jiraSources, {
             'x-atlassian-oauth-token': connection.accessToken,
             'x-atlassian-cloud-id': connection.resource.id,
             'x-atlassian-site-url': connection.resource.url,
-          }));
+          }) });
         }
       }
       if (jsmSources.length > 0) {
         for (const connection of atlassianAuth.getConnections('jsm')) {
-          serverRequests.push(requestSearch(['jsm'], {
+          serverRequests.push({ label: connection.label, request: requestSearch(['jsm'], {
             'x-atlassian-oauth-token': connection.accessToken,
             'x-atlassian-cloud-id': connection.resource.id,
             'x-atlassian-site-url': connection.resource.url,
             'x-jira-project-key': connection.projectKey ?? '',
-          }));
+            'x-jira-jql-filter': encodeURIComponent(connection.jqlFilter ?? ''),
+          }) });
         }
       }
       const googleToken = google.getToken();
       if (driveSources.length > 0 && googleToken) {
-        serverRequests.push(requestSearch(['drive'], { 'x-google-token': googleToken }));
+        serverRequests.push({ label: 'Google Drive', request: requestSearch(['drive'], { 'x-google-token': googleToken }) });
       }
 
       const mattermostToken = mattermost.getToken();
@@ -803,12 +826,24 @@ export default function SearchPage() {
         ? searchMattermostFromBrowser(q, mattermost.baseUrl, mattermostToken)
         : Promise.resolve([]);
 
-      const [serverResults, mattermostResults] = await Promise.all([
-        Promise.all(serverRequests),
-        mattermostRequest,
+      const [serverSettled, mattermostSettled] = await Promise.all([
+        Promise.allSettled(serverRequests.map((entry) => entry.request)),
+        Promise.allSettled([mattermostRequest]),
       ]);
+      const serverResults = serverSettled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+      const mattermostResults = mattermostSettled[0].status === 'fulfilled' ? mattermostSettled[0].value : [];
       const combinedResults = serverResults.flatMap((data) => data.results);
-      const combinedErrors = Object.assign({}, ...serverResults.map((data) => data.errors));
+      const combinedErrors: Record<string, string> = Object.assign({}, ...serverResults.map((data) => data.errors));
+      serverSettled.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          combinedErrors[`connection-${index}`] = `${serverRequests[index].label}: ${result.reason instanceof Error ? result.reason.message : '검색 실패'}`;
+        }
+      });
+      if (mattermostSettled[0].status === 'rejected') {
+        combinedErrors.mattermost = mattermostSettled[0].reason instanceof Error
+          ? mattermostSettled[0].reason.message
+          : 'Mattermost 검색 실패';
+      }
       setResults([...combinedResults, ...mattermostResults]);
       setCounts({
         jira: serverResults.reduce((sum, data) => sum + data.counts.jira, 0),
@@ -897,6 +932,8 @@ export default function SearchPage() {
         <Sidebar
           atlassianConnected={atlassianConnected}
           jsmConnected={jsmConnected}
+          workspaceConnections={atlassianAuth.getConnections('workspace')}
+          jsmConnections={atlassianAuth.getConnections('jsm')}
           googleConnected={google.connected}
           mattermostConnected={mattermostConnected}
           filters={filters}
@@ -968,6 +1005,10 @@ export default function SearchPage() {
                     {errors.confluence && <p className="text-xs text-amber-700">Confluence: {errors.confluence}</p>}
                     {errors.jsm && <p className="text-xs text-amber-700">고객 문의: {errors.jsm}</p>}
                     {errors.drive && <p className="text-xs text-amber-700">Google Drive: {errors.drive}</p>}
+                    {errors.mattermost && <p className="text-xs text-amber-700">Mattermost: {errors.mattermost}</p>}
+                    {Object.entries(errors)
+                      .filter(([key]) => key.startsWith('connection-'))
+                      .map(([key, message]) => <p key={key} className="text-xs text-amber-700">{message}</p>)}
                   </div>
                 )}
 

@@ -72,11 +72,13 @@ async function searchJira(
   authConfig: AtlassianAuthConfig,
   dateRange: DateRange,
   projectKey?: string,
-  source: 'jira' | 'jsm' = 'jira'
+  source: 'jira' | 'jsm' = 'jira',
+  jqlFilter?: string
 ): Promise<SearchResult[]> {
   const safeQ = q.replace(/"/g, '\\"').split(/\s+/).filter(Boolean).map(t => `${t}*`).join(' ');
-  const projectFilter = projectKey ? `project="${projectKey.replace(/"/g, '')}" AND ` : '';
-  const jql = `${projectFilter}text~"${safeQ}"${getJiraDateFilter(dateRange)} ORDER BY updated DESC`;
+  const projectFilter = projectKey ? `project="${projectKey.replace(/"/g, '')}"` : '';
+  const scopeFilter = jqlFilter?.trim() || projectFilter;
+  const jql = `${scopeFilter ? `(${scopeFilter}) AND ` : ''}text~"${safeQ}"${getJiraDateFilter(dateRange)} ORDER BY updated DESC`;
 
   const params = new URLSearchParams({
     jql,
@@ -259,6 +261,8 @@ export async function GET(request: NextRequest) {
   const atlassianCloudId = request.headers.get('x-atlassian-cloud-id');
   const atlassianSiteUrl = request.headers.get('x-atlassian-site-url');
   const jiraProjectKey = request.headers.get('x-jira-project-key') ?? undefined;
+  const encodedJqlFilter = request.headers.get('x-jira-jql-filter');
+  const jiraJqlFilter = encodedJqlFilter ? decodeURIComponent(encodedJqlFilter) : undefined;
 
   const googleToken = request.headers.get('x-google-token');
   
@@ -304,7 +308,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('jsm') && atlassianConfig) {
     tasks.push(
-      searchJira(q, atlassianConfig, dateRange, jiraProjectKey, 'jsm')
+      searchJira(q, atlassianConfig, dateRange, jiraProjectKey, 'jsm', jiraJqlFilter)
         .then((r) => { allResults.push(...r); counts.jsm = r.length; })
         .catch((e: Error) => { errors.jsm = e.message; })
     );

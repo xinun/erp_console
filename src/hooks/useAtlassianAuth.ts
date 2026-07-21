@@ -22,7 +22,9 @@ export interface AtlassianConnection {
   projectKey?: string;
   resource: AtlassianResource;
   accessToken: string;
+  refreshToken?: string;
   expiresAt: number;
+  jqlFilter?: string;
 }
 
 export interface NewAtlassianConnection {
@@ -30,15 +32,14 @@ export interface NewAtlassianConnection {
   kind: AtlassianConnectionKind;
   siteUrl: string;
   projectKey?: string;
+  jqlFilter?: string;
 }
 
 function readConnections(): AtlassianConnection[] {
   try {
     const stored = localStorage.getItem(CONNECTIONS_KEY);
     if (!stored) return [];
-    return (JSON.parse(stored) as AtlassianConnection[]).filter(
-      (connection) => connection.expiresAt > Date.now()
-    );
+    return JSON.parse(stored) as AtlassianConnection[];
   } catch {
     return [];
   }
@@ -56,10 +57,73 @@ export function useAtlassianAuth() {
 
   useEffect(() => {
     const stored = readConnections();
-    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(stored));
-    const timeoutId = window.setTimeout(() => setConnections(stored), 0);
-    return () => window.clearTimeout(timeoutId);
+    let cancelled = false;
+    const restore = async () => {
+      const refreshed = await Promise.all(stored.map(async (connection) => {
+        if (connection.expiresAt > Date.now()) return connection;
+        if (!connection.refreshToken) return connection;
+        try {
+          const response = await fetch('/api/auth/atlassian/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: connection.refreshToken }),
+          });
+          if (!response.ok) return connection;
+          const token = await response.json() as {
+            accessToken: string;
+            refreshToken: string;
+            expiresAt: number;
+          };
+          return { ...connection, ...token };
+        } catch {
+          return connection;
+        }
+      }));
+      if (cancelled) return;
+      localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(refreshed));
+      setConnections(refreshed);
+    };
+    void restore();
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let refreshing = false;
+    const refreshExpiringConnections = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const current = readConnections();
+        let changed = false;
+        const next = await Promise.all(current.map(async (connection) => {
+          if (connection.expiresAt > Date.now() + 5 * 60 * 1000 || !connection.refreshToken) return connection;
+          try {
+            const response = await fetch('/api/auth/atlassian/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken: connection.refreshToken }),
+            });
+            if (!response.ok) return connection;
+            const token = await response.json() as {
+              accessToken: string;
+              refreshToken: string;
+              expiresAt: number;
+            };
+            changed = true;
+            return { ...connection, ...token };
+          } catch {
+            return connection;
+          }
+        }));
+        if (changed) saveConnections(next);
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => void refreshExpiringConnections(), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [saveConnections]);
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
@@ -68,7 +132,7 @@ export function useAtlassianAuth() {
     if (data?.type === 'ATLASSIAN_AUTH_SUCCESS') {
       const expectedState = sessionStorage.getItem(STATE_KEY);
       const pendingRaw = sessionStorage.getItem(PENDING_KEY);
-      const { access_token, expires_at, resources, state } = data.payload;
+      const { access_token, refresh_token, expires_at, resources, state } = data.payload;
       if (!expectedState || state !== expectedState || !pendingRaw) {
         setLoading(false);
         alert('Atlassian 연결 오류: 인증 상태를 확인할 수 없습니다.');
@@ -94,11 +158,21 @@ export function useAtlassianAuth() {
         label: pending.label,
         kind: pending.kind,
         projectKey: pending.projectKey?.trim().toUpperCase(),
+        jqlFilter: pending.jqlFilter?.trim(),
         resource,
         accessToken: access_token,
+        refreshToken: refresh_token,
         expiresAt: expires_at,
       };
-      const next = [...readConnections(), nextConnection];
+      const existing = readConnections();
+      const duplicateIndex = existing.findIndex((connection) =>
+        connection.kind === nextConnection.kind &&
+        connection.resource.id === nextConnection.resource.id &&
+        (connection.projectKey ?? '') === (nextConnection.projectKey ?? '')
+      );
+      const next = duplicateIndex >= 0
+        ? existing.map((connection, index) => index === duplicateIndex ? nextConnection : connection)
+        : [...existing, nextConnection];
       localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(next));
       setConnections(next);
       setLoading(false);

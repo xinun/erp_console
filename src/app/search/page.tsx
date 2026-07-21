@@ -12,6 +12,7 @@ import type {
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useAtlassianAuth } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
+import { searchMattermostFromBrowser } from '@/lib/mattermost';
 
 const CONFIG_KEY = 'mantech_search_config';
 
@@ -434,40 +435,24 @@ function GoogleDrawerContent({ connected, email, loading, hasClientId, onConnect
 interface MattermostDrawerProps {
   connected: boolean;
   loading: boolean;
-  hasClientId: boolean;
-  onConnect: () => void;
+  connection: { baseUrl: string; clientId: string } | null;
+  onConnect: (serverUrl: string, clientId: string) => Promise<string | null>;
   onDisconnect: () => void;
-  onLoginWithCredentials: (serverUrl: string, loginId: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  defaultServerUrl?: string;
 }
 
 function MattermostDrawerContent({
   connected,
   loading,
-  hasClientId,
+  connection,
   onConnect,
   onDisconnect,
-  onLoginWithCredentials,
-  defaultServerUrl,
 }: MattermostDrawerProps) {
-  const [serverUrl, setServerUrl] = useState(defaultServerUrl ?? '');
-  const [loginId, setLoginId] = useState('');
-  const [password, setPassword] = useState('');
-  const [credLoading, setCredLoading] = useState(false);
-  const [credError, setCredError] = useState('');
+  const [serverUrl, setServerUrl] = useState(connection?.baseUrl ?? '');
+  const [clientId, setClientId] = useState(connection?.clientId ?? '');
+  const [connectError, setConnectError] = useState('');
 
-  const handleCredLogin = async () => {
-    if (!serverUrl || !loginId || !password) {
-      setCredError('서버 주소, 아이디, 비밀번호를 모두 입력해주세요.');
-      return;
-    }
-    setCredLoading(true);
-    setCredError('');
-    const result = await onLoginWithCredentials(serverUrl, loginId, password);
-    if (!result.success) {
-      setCredError(result.error ?? '로그인에 실패했습니다.');
-    }
-    setCredLoading(false);
+  const handleConnect = async () => {
+    setConnectError((await onConnect(serverUrl, clientId)) ?? '');
   };
 
   if (connected) {
@@ -475,7 +460,7 @@ function MattermostDrawerContent({
       <div className="space-y-3">
         <div className="p-3 bg-green-50 border border-green-200 rounded-md">
           <p className="text-sm font-medium text-gray-800">Mattermost 연결됨</p>
-          <p className="text-xs text-gray-500 mt-0.5">채팅 대화를 검색할 수 있습니다.</p>
+          <p className="text-xs text-gray-500 mt-0.5">{connection?.baseUrl}</p>
         </div>
         <button
           onClick={onDisconnect}
@@ -488,31 +473,11 @@ function MattermostDrawerContent({
   }
 
   return (
-    <div className="space-y-5">
-      {/* OAuth 간편 로그인 */}
-      {hasClientId && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-600">간편 로그인</p>
-          <button
-            onClick={onConnect}
-            disabled={loading}
-            className="w-full h-9 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? '연결 중...' : 'Mattermost 계정으로 연결'}
-          </button>
-        </div>
-      )}
-
-      {/* 구분선 */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400">{hasClientId ? '또는' : '로그인'}</span>
-        <div className="flex-1 h-px bg-gray-200" />
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-relaxed text-blue-700">
+        회사의 Mattermost 관리자가 발급한 OAuth Client ID와 서버 주소를 입력하세요.
       </div>
-
-      {/* 수동 로그인 */}
       <div className="space-y-3">
-        <p className="text-xs font-medium text-gray-600">이메일 / 비밀번호로 로그인</p>
         <div>
           <label className="block text-xs text-gray-500 mb-1">서버 주소</label>
           <input
@@ -524,38 +489,28 @@ function MattermostDrawerContent({
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">이메일 또는 아이디</label>
+          <label className="block text-xs text-gray-500 mb-1">OAuth Client ID</label>
           <input
             type="text"
-            value={loginId}
-            onChange={(e) => setLoginId(e.target.value)}
-            placeholder="user@company.com"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+            placeholder="Mattermost에서 발급받은 Client ID"
             className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">비밀번호</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCredLogin()}
-            placeholder="비밀번호"
-            className="w-full h-9 px-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-        {credError && (
-          <p className="text-xs text-red-600">{credError}</p>
+        {connectError && (
+          <p className="text-xs text-red-600">{connectError}</p>
         )}
         <button
-          onClick={handleCredLogin}
-          disabled={credLoading}
-          className="w-full h-9 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+          onClick={handleConnect}
+          disabled={loading}
+          className="w-full h-9 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
         >
-          {credLoading ? '로그인 중...' : '로그인'}
+          {loading ? '연결 중...' : 'Mattermost 계정으로 연결'}
         </button>
         <p className="text-xs text-gray-400 leading-relaxed">
-          SSO(구글 계정 등)로 접속하는 경우 이 방식은 동작하지 않습니다.
+          비밀번호는 ERP Console에 입력하거나 전송하지 않습니다.
         </p>
       </div>
     </div>
@@ -653,11 +608,9 @@ function Drawer({ open, type, atlassianConfig, atlassianAuth, google, mattermost
                 <MattermostDrawerContent
                   connected={mattermost.connected}
                   loading={mattermost.loading}
-                  hasClientId={mattermost.hasClientId}
+                  connection={mattermost.connection}
                   onConnect={mattermost.connect}
                   onDisconnect={mattermost.disconnect}
-                  onLoginWithCredentials={mattermost.loginWithCredentials}
-                  defaultServerUrl={mattermost.baseUrl}
                 />
               )}
             </div>
@@ -694,6 +647,7 @@ function Sidebar({
   onFiltersChange,
   onServiceClick,
 }: SidebarProps) {
+  const [showAddMenu, setShowAddMenu] = useState(false);
   const groups: ServiceGroup[] = [
     {
       groupLabel: 'Atlassian',
@@ -732,6 +686,10 @@ function Sidebar({
       connected: mattermostConnected,
     },
   ];
+  const connectedGroups = groups.filter((group) => group.connected);
+  const availableGroups = groups.filter(
+    (group) => !group.connected && group.drawerType !== 'jsm'
+  );
 
   const toggleSource = (source: SearchSource) => {
     const next = filters.sources.includes(source)
@@ -764,7 +722,7 @@ function Sidebar({
       <div className="p-3 flex-1">
         {/* Service groups */}
         <div className="space-y-4 mb-5">
-          {groups.map((group) => (
+          {connectedGroups.map((group) => (
             <div key={group.groupLabel}>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">
                 {group.groupLabel}
@@ -790,6 +748,42 @@ function Sidebar({
               </div>
             </div>
           ))}
+          {connectedGroups.length === 0 && (
+            <div className="px-2 py-6 text-center">
+              <p className="text-xs text-gray-400">연결된 서비스가 없습니다.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="relative mb-5">
+          <button
+            type="button"
+            onClick={() => setShowAddMenu((current) => !current)}
+            className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+          >
+            <span className="text-lg leading-none">+</span>
+            연결 추가
+          </button>
+          {showAddMenu && (
+            <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+              {availableGroups.length > 0 ? availableGroups.map((group) => (
+                <button
+                  key={group.groupLabel}
+                  type="button"
+                  onClick={() => {
+                    setShowAddMenu(false);
+                    onServiceClick(group.drawerType);
+                  }}
+                  className="w-full px-3 py-2.5 text-left hover:bg-gray-50"
+                >
+                  <span className="block text-sm font-medium text-gray-700">{group.groupLabel}</span>
+                  <span className="block text-xs text-gray-400">{group.services.map((service) => service.name).join(', ')}</span>
+                </button>
+              )) : (
+                <p className="px-3 py-3 text-xs text-gray-400">모든 서비스를 연결했습니다.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="border-t border-gray-100 pt-4 mb-5">
@@ -931,12 +925,6 @@ export default function SearchPage() {
         return;
       }
 
-      const params = new URLSearchParams({
-        q,
-        sources: activeSources.join(','),
-        dateRange: filters.dateRange,
-      });
-
       const headers: Record<string, string> = {};
       
       const atlassianToken = atlassianAuth.getToken();
@@ -954,29 +942,39 @@ export default function SearchPage() {
       const googleToken = google.getToken();
       if (googleToken) headers['x-google-token'] = googleToken;
 
+      const serverSources = activeSources.filter((source) => source !== 'mattermost');
+      const serverRequest = serverSources.length > 0
+        ? fetch(`/api/search?${new URLSearchParams({
+            q,
+            sources: serverSources.join(','),
+            dateRange: filters.dateRange,
+          })}`, { headers }).then(async (response) => {
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error ?? '검색 중 오류가 발생했습니다.');
+            return data;
+          })
+        : Promise.resolve({ results: [], counts: {}, errors: {} });
+
       const mattermostToken = mattermost.getToken();
-      if (mattermostToken && mattermost.baseUrl) {
-        headers['x-mattermost-url'] = mattermost.baseUrl;
-        headers['x-mattermost-token'] = mattermostToken;
-      }
+      const mattermostRequest = activeSources.includes('mattermost') && mattermostToken && mattermost.baseUrl
+        ? searchMattermostFromBrowser(q, mattermost.baseUrl, mattermostToken)
+        : Promise.resolve([]);
 
-      const response = await fetch(`/api/search?${params}`, { headers });
-      const data = await response.json();
-
-      if (!response.ok) {
-        setErrors({ global: data.error ?? '검색 중 오류가 발생했습니다.' });
-        return;
-      }
-
-      setResults(data.results ?? []);
-      setCounts(data.counts ?? { jira: 0, confluence: 0, drive: 0, mattermost: 0 });
-      setErrors(data.errors ?? {});
-    } catch {
-      setErrors({ global: '서버 연결에 실패했습니다.' });
+      const [serverData, mattermostResults] = await Promise.all([serverRequest, mattermostRequest]);
+      setResults([...(serverData.results ?? []), ...mattermostResults]);
+      setCounts({
+        jira: serverData.counts?.jira ?? 0,
+        confluence: serverData.counts?.confluence ?? 0,
+        drive: serverData.counts?.drive ?? 0,
+        mattermost: mattermostResults.length,
+      });
+      setErrors(serverData.errors ?? {});
+    } catch (error) {
+      setErrors({ global: error instanceof Error ? error.message : '서비스 연결에 실패했습니다.' });
     } finally {
       setIsLoading(false);
     }
-  }, [query, atlassianConfig, filters, google]);
+  }, [query, atlassianConfig, filters, google, atlassianAuth, mattermost]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') handleSearch();

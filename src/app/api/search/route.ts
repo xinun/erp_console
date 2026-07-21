@@ -232,61 +232,6 @@ async function searchGoogleDrive(
   });
 }
 
-// ─── Mattermost ───────────────────────────────────────────────────────────────
-
-async function searchMattermost(
-  q: string,
-  baseUrl: string,
-  token: string
-): Promise<SearchResult[]> {
-  try {
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-    
-    // 1. 사용자 소속 팀 조회
-    const teamsRes = await fetch(`${cleanBaseUrl}/api/v4/users/me/teams`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!teamsRes.ok) throw new Error(`Teams API 오류 (${teamsRes.status})`);
-    const teams = await teamsRes.json();
-
-    // 2. 모든 팀을 대상으로 병렬 검색
-    const searchPromises = teams.map(async (team: Record<string, string>) => {
-      const searchRes = await fetch(`${cleanBaseUrl}/api/v4/teams/${team.id}/posts/search`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ terms: q, is_or_search: false })
-      });
-      
-      if (!searchRes.ok) return [];
-      
-      const searchData = await searchRes.json();
-      if (!searchData.order || searchData.order.length === 0) return [];
-
-      return searchData.order.map((postId: string) => {
-        const post = searchData.posts[postId];
-        return {
-          id: post.id as string,
-          source: 'mattermost' as const,
-          title: `메시지 (${team.display_name})`,
-          snippet: (post.message as string) || '',
-          url: `${cleanBaseUrl}/${team.name}/pl/${post.id}`,
-          author: (post.user_id as string) || 'Mattermost User',
-          date: new Date(Number(post.create_at)).toISOString(),
-          team: team.display_name as string
-        };
-      });
-    });
-
-    const resultsArray = await Promise.all(searchPromises);
-    return resultsArray.flat().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  } catch (error: any) {
-    throw new Error(`Mattermost 오류: ${error.message}`);
-  }
-}
-
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -313,9 +258,6 @@ export async function GET(request: NextRequest) {
 
   const googleToken = request.headers.get('x-google-token');
   
-  const mattermostUrl = request.headers.get('x-mattermost-url');
-  const mattermostToken = request.headers.get('x-mattermost-token');
-
   const errors: Record<string, string> = {};
   const allResults: SearchResult[] = [];
   const counts = { jira: 0, confluence: 0, drive: 0, mattermost: 0 };
@@ -369,14 +311,6 @@ export async function GET(request: NextRequest) {
       searchGoogleDrive(q, googleToken, dateRange)
         .then((r) => { allResults.push(...r); counts.drive = r.length; })
         .catch((e: Error) => { errors.drive = e.message; })
-    );
-  }
-
-  if (sources.includes('mattermost') && mattermostUrl && mattermostToken) {
-    tasks.push(
-      searchMattermost(q, mattermostUrl, mattermostToken)
-        .then((r) => { allResults.push(...r); counts.mattermost = r.length; })
-        .catch((e: Error) => { errors.mattermost = e.message; })
     );
   }
 

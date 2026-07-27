@@ -11,11 +11,21 @@ JSM 고객 문의는 Jira의 이슈 검색 API와 프로젝트/JQL 필터를 사
 ## 개발 서버 실행 방법
 
 ```bash
-npm install
+Copy-Item .env.example .env.local
+npm ci
 npm run dev
 ```
 
 브라우저에서 [http://localhost:3000](http://localhost:3000)으로 접속하세요.
+
+## 환경변수
+
+필요한 환경변수 전체 목록과 설명은 [`.env.example`](.env.example)에 있습니다. 로컬에서는 이 파일을 `.env.local`로 복사한 뒤 실제 값을 입력하고, Vercel에서는 Project Settings의 Environment Variables에 같은 이름으로 등록합니다.
+
+- `NEXT_PUBLIC_` 접두사가 있는 값은 브라우저에 공개됩니다. Client ID와 서버 URL처럼 공개 가능한 값만 사용합니다.
+- `ATLASSIAN_CLIENT_SECRET`과 `MATTERMOST_CLIENT_SECRET`은 서버 전용 비밀값입니다.
+- 실제 `.env.local`, Client Secret, access token은 Git에 커밋하지 않습니다.
+- 환경변수를 변경한 후에는 로컬 개발 서버를 재시작하고 Vercel을 다시 배포해야 합니다.
 
 ---
 
@@ -24,7 +34,7 @@ npm run dev
 시스템에서 '간편 로그인(OAuth)'을 사용하기 위해서는 Atlassian Developer Console에서 앱을 등록해야 합니다.
 
 ### 1. 환경 변수 설정
-프로젝트 최상단의 `.env.local.example` 파일을 복사하여 `.env.local` 파일을 만들고, 아래의 `Client ID`와 `Secret`을 입력합니다. (값을 채우려면 아래 2번 과정을 진행해야 합니다.)
+프로젝트 최상단의 `.env.example` 파일을 복사하여 `.env.local` 파일을 만들고, 아래의 `Client ID`와 `Secret`을 입력합니다. (값을 채우려면 아래 2번 과정을 진행해야 합니다.)
 
 ```env
 NEXT_PUBLIC_ATLASSIAN_CLIENT_ID=여기에_발급받은_Client_ID_입력
@@ -72,3 +82,28 @@ Google Drive 검색을 위해서는 Google Cloud Console에서 OAuth 클라이�
 3. `OAuth 클라이언트 ID` 생성 (웹 애플리케이션)
 4. 승인된 자바스크립트 원본에 `http://localhost:3000` 추가
 5. 발급된 클라이언트 ID를 `.env.local`의 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`에 입력
+
+---
+
+## ⚙️ Mattermost 설정 가이드
+
+Mattermost는 Confidential OAuth Client와 ERP Console 서버 중계 방식을 사용합니다. 토큰 교환과 메시지 검색은 ERP Console 서버에서 처리하므로 Mattermost의 브라우저 CORS 허용 설정은 필요하지 않습니다.
+
+필요한 환경변수:
+
+```env
+MATTERMOST_BASE_URL=https://mattermost.example.com
+MATTERMOST_CLIENT_ID=발급받은_Client_ID
+MATTERMOST_CLIENT_SECRET=발급받은_Client_Secret
+NEXT_PUBLIC_MATTERMOST_URL=https://mattermost.example.com
+NEXT_PUBLIC_MATTERMOST_CLIENT_ID=발급받은_Client_ID
+```
+
+Mattermost OAuth 앱에는 사용하는 환경에 맞는 콜백 URL을 등록합니다.
+
+```text
+http://localhost:3000/api/auth/mattermost/callback
+https://erp-console.vercel.app/api/auth/mattermost/callback
+```
+
+Vercel 미리보기 배포에서 OAuth를 테스트한다면 해당 미리보기 주소의 콜백 URL도 별도로 등록해야 합니다.

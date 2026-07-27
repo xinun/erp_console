@@ -10,6 +10,8 @@
 
 ## 최근 완료
 
+- 필요한 환경변수 전체를 주석과 함께 `.env.example`에 정리했다.
+- README에 로컬 및 Vercel 환경변수 관리 원칙과 Mattermost 설정 방법을 추가했다.
 - Mattermost OAuth 토큰 교환과 메시지 검색을 서버 중계 방식으로 변경했다.
 - `MATTERMOST_CLIENT_SECRET`은 서버 Route Handler에서만 사용하도록 구성했다.
 - Mattermost 브라우저 직접 호출을 제거해 CORS 의존성을 없앴다.

@@ -69,20 +69,67 @@ function IconChevronRight() {
   );
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+function IconPlus() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-function StatusBadge({ connected }: { connected: boolean }) {
-  if (connected) {
+function IconChevronDown({ open = false }: { open?: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+      className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+    >
+      <path d="M3.5 5.25 7 8.75l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="m2.5 6 2.2 2.2 4.8-4.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconService({ type }: { type: NonNullable<DrawerType> }) {
+  const iconClass = 'h-4 w-4';
+  if (type === 'google') {
     return (
-      <span className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full leading-none">
-        연결됨
-      </span>
+      <svg className={iconClass} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2.7 11.2 6.3 4.9h3.45l3.55 6.3-1.7 2.8H4.35L2.7 11.2Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+        <path d="m6.3 4.9 3.65 6.3M2.7 11.2h7.25" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === 'mattermost') {
+    return (
+      <svg className={iconClass} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M3 4.25h10v6.5H7.2L4.25 13v-2.25H3v-6.5Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+        <path d="M5.25 7.5h5.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === 'jsm') {
+    return (
+      <svg className={iconClass} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M4 3.25h8v9.5H4v-9.5Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+        <path d="M6 6h4M6 8.5h2.75" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+      </svg>
     );
   }
   return (
-    <span className="text-xs font-medium text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-full leading-none">
-      미연결
-    </span>
+    <svg className={iconClass} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2.75 4.25A1.25 1.25 0 0 1 4 3h3l1 1.25h4A1.25 1.25 0 0 1 13.25 5.5v6.25A1.25 1.25 0 0 1 12 13H4a1.25 1.25 0 0 1-1.25-1.25v-7.5Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -595,55 +642,98 @@ function Sidebar({
   ];
 
   return (
-    <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
-      <div className="p-3 flex-1">
+    <aside className="w-64 flex-shrink-0 border-r border-slate-200/80 bg-slate-50/70 flex flex-col overflow-y-auto">
+      <div className="flex-1 px-3 py-4">
         {/* Service groups */}
-        <div className="space-y-4 mb-5">
+        <div className="mb-5">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">연결</p>
+              <p className="mt-0.5 text-xs text-slate-500">{connectedGroups.length}개 서비스 그룹 사용 중</p>
+            </div>
+            <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 shadow-sm">
+              {connectedGroups.length}
+            </span>
+          </div>
+          <div className="space-y-2">
           {connectedGroups.map((group) => (
-            <div key={group.groupLabel}>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">
-                {group.groupLabel}
-              </p>
-              <div className="space-y-px">
+            <div key={group.groupLabel} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+              <div className="flex items-center gap-2.5 border-b border-slate-100 px-3 py-2.5">
+                <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                  group.drawerType === 'jsm'
+                    ? 'bg-amber-50 text-amber-600'
+                    : group.drawerType === 'google'
+                      ? 'bg-emerald-50 text-emerald-600'
+                      : group.drawerType === 'mattermost'
+                        ? 'bg-rose-50 text-rose-600'
+                        : 'bg-blue-50 text-blue-600'
+                }`}>
+                  <IconService type={group.drawerType as NonNullable<DrawerType>} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-700">{group.groupLabel}</p>
+                  <p className="text-[11px] text-emerald-600">연결됨</p>
+                </div>
+              </div>
+              <div className="p-1.5">
                 {group.services.map((service) => (
                   <button
                     key={service.name}
+                    type="button"
                     onClick={() => onServiceClick(group.drawerType)}
-                    className="w-full flex items-center justify-between px-2 py-2 rounded-md hover:bg-gray-50 transition-colors text-left group"
+                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
-                    <div className="min-w-0">
-                      <span className="text-sm text-gray-700 block">{service.name}</span>
-                      <span className="block truncate text-[11px] text-gray-400">{service.desc}</span>
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400 ring-2 ring-emerald-50" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-slate-700">{service.name}</span>
+                      <span className="block truncate text-[10px] text-slate-400">{service.desc}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                      <StatusBadge connected={group.connected} />
-                      <span className="text-gray-300 group-hover:text-gray-400 transition-colors">
-                        <IconChevronRight />
-                      </span>
-                    </div>
+                    <span className="flex-shrink-0 translate-x-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-slate-500">
+                      <IconChevronRight />
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
           ))}
           {connectedGroups.length === 0 && (
-            <div className="px-2 py-6 text-center">
-              <p className="text-xs text-gray-400">연결된 서비스가 없습니다.</p>
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-center">
+              <p className="text-xs font-medium text-slate-500">아직 연결된 서비스가 없습니다.</p>
+              <p className="mt-1 text-[11px] text-slate-400">아래에서 검색 서비스를 추가하세요.</p>
             </div>
           )}
+          </div>
         </div>
 
-        <div className="relative mb-5">
+        <div className="relative mb-6">
           <button
             type="button"
             onClick={() => setShowAddMenu((current) => !current)}
-            className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+            aria-expanded={showAddMenu}
+            aria-controls="sidebar-add-service-menu"
+            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              showAddMenu
+                ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-md'
+            }`}
           >
-            <span className="text-lg leading-none">+</span>
-            연결 추가
+            <span className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${showAddMenu ? 'bg-blue-100' : 'bg-slate-100'}`}>
+              <IconPlus />
+            </span>
+            <span className="flex-1 text-left">연결 추가</span>
+            <IconChevronDown open={showAddMenu} />
           </button>
-          {showAddMenu && (
-            <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+          <div
+            id="sidebar-add-service-menu"
+            aria-hidden={!showAddMenu}
+            className={`grid transition-all duration-300 ease-out ${
+              showAddMenu
+                ? 'grid-rows-[1fr] opacity-100 translate-y-0'
+                : 'pointer-events-none grid-rows-[0fr] -translate-y-1 opacity-0'
+            }`}
+          >
+            <div className="overflow-hidden">
+              <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-slate-200/60">
               {availableGroups.length > 0 ? availableGroups.map((group) => (
                 <button
                   key={group.groupLabel}
@@ -652,31 +742,42 @@ function Sidebar({
                     setShowAddMenu(false);
                     onServiceClick(group.drawerType);
                   }}
-                  className="w-full px-3 py-2.5 text-left hover:bg-gray-50"
+                  tabIndex={showAddMenu ? 0 : -1}
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  <span className="block text-sm font-medium text-gray-700">{group.groupLabel}</span>
-                  <span className="block text-xs text-gray-400">
-                    {group.services.length > 0
-                      ? group.services.map((service) => service.name).join(', ')
-                      : group.drawerType === 'atlassian' ? 'Jira, Confluence' : 'Jira Service Management'}
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-blue-50 group-hover:text-blue-600">
+                    <IconService type={group.drawerType as NonNullable<DrawerType>} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-slate-700">{group.groupLabel}</span>
+                    <span className="block truncate text-[10px] text-slate-400">
+                      {group.services.length > 0
+                        ? group.services.map((service) => service.name).join(', ')
+                        : group.drawerType === 'atlassian' ? 'Jira, Confluence' : 'Jira Service Management'}
+                    </span>
+                  </span>
+                  <span className="text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-blue-500">
+                    <IconChevronRight />
                   </span>
                 </button>
               )) : (
-                <p className="px-3 py-3 text-xs text-gray-400">모든 서비스를 연결했습니다.</p>
+                <p className="px-3 py-3 text-center text-xs text-slate-400">모든 서비스를 연결했습니다.</p>
               )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
-        <div className="border-t border-gray-100 pt-4 mb-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 mb-2">
-            검색 범위
-          </p>
-          <div className="space-y-px">
+        <div className="mb-5">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">검색 범위</p>
+            <span className="text-[10px] font-medium text-slate-400">{filters.sources.length}개 선택</span>
+          </div>
+          <div className="space-y-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             {filterOptions.map(({ value, label, available }) => (
               <label
                 key={value}
-                className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors ${available ? 'hover:bg-gray-50 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-all ${available ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-40'
                   }`}
               >
                 <input
@@ -684,32 +785,35 @@ function Sidebar({
                   checked={filters.sources.includes(value)}
                   onChange={() => available && toggleSource(value)}
                   disabled={!available}
-                  className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600"
+                  className="peer sr-only"
                 />
-                <span className="text-sm text-gray-700">{label}</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded border border-slate-300 bg-white text-transparent transition-colors peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400 peer-focus-visible:ring-offset-1">
+                  <IconCheck />
+                </span>
+                <span className="text-xs font-medium text-slate-600">{label}</span>
               </label>
             ))}
           </div>
         </div>
 
-        <div className="border-t border-gray-100 pt-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 mb-2">
-            기간
-          </p>
-          <div className="space-y-px">
+        <div>
+          <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">기간</p>
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             {dateOptions.map(({ value, label }) => (
               <label
                 key={value}
-                className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-gray-50 cursor-pointer"
+                className="cursor-pointer"
               >
                 <input
                   type="radio"
                   name="dateRange"
                   checked={filters.dateRange === value}
                   onChange={() => setDateRange(value)}
-                  className="w-3.5 h-3.5 border-gray-300 accent-blue-600"
+                  className="peer sr-only"
                 />
-                <span className="text-sm text-gray-700">{label}</span>
+                <span className="block rounded-lg px-2 py-2 text-center text-[11px] font-medium text-slate-500 transition-all hover:bg-slate-50 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500">
+                  {label}
+                </span>
               </label>
             ))}
           </div>

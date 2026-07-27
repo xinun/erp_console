@@ -318,6 +318,10 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get('q')?.trim();
   const sourcesParam = searchParams.get('sources');
   const dateRange = (searchParams.get('dateRange') as DateRange) ?? 'all';
+  const excludedKeywords = (searchParams.get('exclude') ?? '')
+    .split(/[\n,]+/)
+    .map((keyword) => keyword.trim().toLocaleLowerCase())
+    .filter(Boolean);
 
   if (!q) {
     return Response.json({ results: [], counts: { jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 }, errors: {} });
@@ -415,6 +419,27 @@ export async function GET(request: NextRequest) {
 
   await Promise.all(tasks);
 
-  const response: SearchResponse = { results: allResults, counts, errors };
+  const results = excludedKeywords.length === 0
+    ? allResults
+    : allResults.filter((result) => {
+        const searchableText = [
+          result.title,
+          result.snippet,
+          result.author,
+          result.project,
+          result.space,
+          result.team,
+        ].filter(Boolean).join(' ').toLocaleLowerCase();
+        return !excludedKeywords.some((keyword) => searchableText.includes(keyword));
+      });
+  const filteredCounts = {
+    jira: results.filter((result) => result.source === 'jira').length,
+    confluence: results.filter((result) => result.source === 'confluence').length,
+    jsm: results.filter((result) => result.source === 'jsm').length,
+    drive: results.filter((result) => result.source === 'drive').length,
+    mattermost: results.filter((result) => result.source === 'mattermost').length,
+  };
+
+  const response: SearchResponse = { results, counts: filteredCounts, errors };
   return Response.json(response);
 }

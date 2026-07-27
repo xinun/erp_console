@@ -99,6 +99,15 @@ function IconCheck() {
   );
 }
 
+function IconMinusCircle() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <circle cx="7.5" cy="7.5" r="5.75" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M4.75 7.5h5.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IconService({ type }: { type: NonNullable<DrawerType> }) {
   const iconClass = 'h-4 w-4';
   if (type === 'google') {
@@ -554,8 +563,6 @@ interface SidebarProps {
   jsmConnections: AtlassianConnection[];
   googleConnected: boolean;
   mattermostConnected: boolean;
-  filters: SearchFilters;
-  onFiltersChange: (f: SearchFilters) => void;
   onServiceClick: (drawer: DrawerType) => void;
 }
 
@@ -566,8 +573,6 @@ function Sidebar({
   jsmConnections,
   googleConnected,
   mattermostConnected,
-  filters,
-  onFiltersChange,
   onServiceClick,
 }: SidebarProps) {
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -612,33 +617,6 @@ function Sidebar({
   ];
   const connectedGroups = groups.filter((group) => group.connected);
   const availableGroups = groups.filter((group) => !group.connected);
-
-  const toggleSource = (source: SearchSource) => {
-    const next = filters.sources.includes(source)
-      ? filters.sources.filter((s) => s !== source)
-      : [...filters.sources, source];
-    if (next.length === 0) return;
-    onFiltersChange({ ...filters, sources: next });
-  };
-
-  const setDateRange = (dateRange: DateRange) => {
-    onFiltersChange({ ...filters, dateRange });
-  };
-
-  const filterOptions: { value: SearchSource; label: string; available: boolean }[] = [
-    { value: 'jira', label: 'Jira', available: atlassianConnected },
-    { value: 'confluence', label: 'Confluence', available: atlassianConnected },
-    { value: 'jsm', label: '고객 문의', available: jsmConnected },
-    { value: 'drive', label: 'Google Drive', available: googleConnected },
-    { value: 'mattermost', label: 'Mattermost', available: mattermostConnected },
-  ];
-
-  const dateOptions: { value: DateRange; label: string }[] = [
-    { value: 'all', label: '전체' },
-    { value: '1w', label: '최근 1주일' },
-    { value: '1m', label: '최근 1개월' },
-    { value: '3m', label: '최근 3개월' },
-  ];
 
   return (
     <aside className="w-64 flex-shrink-0 border-r border-slate-200/80 bg-slate-50/70 flex flex-col overflow-y-auto">
@@ -704,7 +682,7 @@ function Sidebar({
           </div>
         </div>
 
-        <div className="relative mb-6">
+        <div className="relative">
           <button
             type="button"
             onClick={() => setShowAddMenu((current) => !current)}
@@ -766,57 +744,6 @@ function Sidebar({
             </div>
           </div>
         </div>
-
-        <div className="mb-5">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">검색 범위</p>
-            <span className="text-[10px] font-medium text-slate-400">{filters.sources.length}개 선택</span>
-          </div>
-          <div className="space-y-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            {filterOptions.map(({ value, label, available }) => (
-              <label
-                key={value}
-                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-all ${available ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-40'
-                  }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.sources.includes(value)}
-                  onChange={() => available && toggleSource(value)}
-                  disabled={!available}
-                  className="peer sr-only"
-                />
-                <span className="flex h-4 w-4 items-center justify-center rounded border border-slate-300 bg-white text-transparent transition-colors peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400 peer-focus-visible:ring-offset-1">
-                  <IconCheck />
-                </span>
-                <span className="text-xs font-medium text-slate-600">{label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">기간</p>
-          <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            {dateOptions.map(({ value, label }) => (
-              <label
-                key={value}
-                className="cursor-pointer"
-              >
-                <input
-                  type="radio"
-                  name="dateRange"
-                  checked={filters.dateRange === value}
-                  onChange={() => setDateRange(value)}
-                  className="peer sr-only"
-                />
-                <span className="block rounded-lg px-2 py-2 text-center text-[11px] font-medium text-slate-500 transition-all hover:bg-slate-50 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500">
-                  {label}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
       </div>
     </aside>
   );
@@ -832,6 +759,7 @@ export default function SearchPage() {
   const [activeDrawer, setActiveDrawer] = useState<DrawerType>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [query, setQuery] = useState('');
+  const [excludedKeywords, setExcludedKeywords] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [counts, setCounts] = useState({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
@@ -847,6 +775,14 @@ export default function SearchPage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const toggleSource = (source: SearchSource) => {
+    const next = filters.sources.includes(source)
+      ? filters.sources.filter((item) => item !== source)
+      : [...filters.sources, source];
+    if (next.length === 0) return;
+    setFilters({ ...filters, sources: next });
+  };
 
   const handleSearch = useCallback(async () => {
     const q = query.trim();
@@ -892,6 +828,7 @@ export default function SearchPage() {
           q,
           sources: sources.join(','),
           dateRange: filters.dateRange,
+          exclude: excludedKeywords,
         })}`, { headers });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? '검색 중 오류가 발생했습니다.');
@@ -955,7 +892,7 @@ export default function SearchPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [query, filters, google, atlassianAuth, mattermost]);
+  }, [query, excludedKeywords, filters, google, atlassianAuth, mattermost]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') handleSearch();
@@ -974,6 +911,19 @@ export default function SearchPage() {
   const jsmConnected = atlassianAuth.getConnections('jsm').length > 0;
   const mattermostConnected = mattermost.connected;
   const hasAnyConnection = atlassianConnected || jsmConnected || google.connected || mattermostConnected;
+  const filterOptions: { value: SearchSource; label: string; available: boolean }[] = [
+    { value: 'jira', label: 'Jira', available: atlassianConnected },
+    { value: 'confluence', label: 'Confluence', available: atlassianConnected },
+    { value: 'jsm', label: '고객 문의', available: jsmConnected },
+    { value: 'drive', label: 'Google Drive', available: google.connected },
+    { value: 'mattermost', label: 'Mattermost', available: mattermostConnected },
+  ];
+  const dateOptions: { value: DateRange; label: string }[] = [
+    { value: 'all', label: '전체 기간' },
+    { value: '1w', label: '최근 1주일' },
+    { value: '1m', label: '최근 1개월' },
+    { value: '3m', label: '최근 3개월' },
+  ];
 
   return (
     <div className="h-full flex flex-col">
@@ -1033,38 +983,93 @@ export default function SearchPage() {
           jsmConnections={atlassianAuth.getConnections('jsm')}
           googleConnected={google.connected}
           mattermostConnected={mattermostConnected}
-          filters={filters}
-          onFiltersChange={setFilters}
           onServiceClick={setActiveDrawer}
         />
 
         {/* Main */}
         <main className="flex-1 overflow-y-auto bg-[#F4F5F7]">
           <div className="max-w-3xl mx-auto px-6 py-6">
-            {/* Search bar */}
-            <div className="flex gap-2 mb-6">
-              <div className="flex-1 relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                  <IconSearch size={15} />
-                </span>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="검색어를 입력하세요"
-                  className="w-full h-10 pl-9 pr-4 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-                />
+            {/* Search and filters */}
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                    <IconSearch size={15} />
+                  </span>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="검색어를 입력하세요"
+                    className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-sm placeholder-slate-400 transition-shadow focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={handleSearch}
+                  disabled={isLoading || !query.trim()}
+                  className="flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isLoading && <IconSpinner />}
+                  검색
+                </button>
               </div>
-              <button
-                onClick={handleSearch}
-                disabled={isLoading || !query.trim()}
-                className="h-10 px-5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isLoading && <IconSpinner />}
-                검색
-              </button>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                <span className="mr-1 text-[11px] font-semibold text-slate-400">검색 범위</span>
+                {filterOptions.map(({ value, label, available }) => (
+                  <label
+                    key={value}
+                    className={`cursor-pointer ${available ? '' : 'pointer-events-none opacity-35'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={filters.sources.includes(value)}
+                      onChange={() => available && toggleSource(value)}
+                      disabled={!available}
+                      className="peer sr-only"
+                    />
+                    <span className="flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-slate-300 peer-checked:border-blue-200 peer-checked:bg-blue-50 peer-checked:text-blue-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500">
+                      {filters.sources.includes(value) && <IconCheck />}
+                      {label}
+                    </span>
+                  </label>
+                ))}
+                <span className="mx-1 h-4 w-px bg-slate-200" />
+                <select
+                  value={filters.dateRange}
+                  onChange={(event) => setFilters({ ...filters, dateRange: event.target.value as DateRange })}
+                  aria-label="검색 기간"
+                  className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-medium text-slate-600 outline-none transition-colors hover:border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  {dateOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-2 flex items-center gap-2 rounded-xl bg-slate-50 px-3">
+                <span className="text-slate-400"><IconMinusCircle /></span>
+                <input
+                  type="text"
+                  value={excludedKeywords}
+                  onChange={(event) => setExcludedKeywords(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="제외 키워드 입력 (쉼표로 구분)"
+                  aria-label="제외 키워드"
+                  className="h-9 flex-1 bg-transparent text-xs text-slate-600 outline-none placeholder:text-slate-400"
+                />
+                {excludedKeywords && (
+                  <button
+                    type="button"
+                    onClick={() => setExcludedKeywords('')}
+                    className="text-[11px] font-medium text-slate-400 hover:text-slate-600"
+                  >
+                    지우기
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Loading skeleton */}

@@ -103,6 +103,8 @@ Atlassian 운영 콜백:
 https://erp-console.vercel.app/api/auth/atlassian/callback
 ```
 
+Vercel Function은 `vercel.json`의 `regions` 설정에 따라 서울 리전(`icn1`)에서 실행한다. 한국에 있는 Mattermost 서버와의 지연 및 해외 리전 접근 제한 가능성을 줄이기 위한 설정이다.
+
 Vercel 미리보기 배포는 주소가 달라질 수 있으므로 OAuth 테스트 시 해당 미리보기 콜백을 Developer Console에 별도로 등록해야 한다.
 
 ## 현재 제약

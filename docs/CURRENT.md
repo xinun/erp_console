@@ -10,6 +10,9 @@
 
 ## 최근 완료
 
+- Mattermost OAuth 토큰 교환과 메시지 검색을 서버 중계 방식으로 변경했다.
+- `MATTERMOST_CLIENT_SECRET`은 서버 Route Handler에서만 사용하도록 구성했다.
+- Mattermost 브라우저 직접 호출을 제거해 CORS 의존성을 없앴다.
 - 왼쪽 패널을 서비스 카드, 상태 아이콘, 선택형 검색 필터 구조로 개편했다.
 - 연결 추가 메뉴에 열림·닫힘 애니메이션과 키보드 포커스 상태를 추가했다.
 - Atlassian OAuth 요청에서 미등록 `read:servicedesk-request` scope를 제거했다.

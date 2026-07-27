@@ -76,33 +76,39 @@ export function useMattermostAuth() {
       sessionStorage.removeItem(MATTERMOST_OAUTH_STATE_KEY);
       sessionStorage.removeItem(MATTERMOST_PKCE_VERIFIER_KEY);
 
-      const currentConnection = JSON.parse(storedConnection) as MattermostConnection;
-      const redirectUri = `${window.location.origin}/api/auth/mattermost/callback`;
-      void fetch(`${currentConnection.baseUrl}/oauth/access_token`, {
+      void fetch('/api/auth/mattermost/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          client_id: currentConnection.clientId,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           code,
-          code_verifier: verifier,
-          redirect_uri: redirectUri,
+          codeVerifier: verifier,
         }),
       }).then(async (response) => {
-        const tokenData = await response.json();
-        if (!response.ok || !tokenData.access_token) {
-          throw new Error(tokenData.error_description ?? tokenData.error ?? '토큰을 발급받지 못했습니다.');
+        const tokenData = await response.json() as {
+          accessToken?: string;
+          expiresIn?: number;
+          baseUrl?: string;
+          clientId?: string;
+          error?: string;
+        };
+        if (!response.ok || !tokenData.accessToken) {
+          throw new Error(tokenData.error ?? '토큰을 발급받지 못했습니다.');
         }
-        const expiresIn = Number(tokenData.expires_in);
+        const expiresIn = Number(tokenData.expiresIn);
         const expiresAt = Date.now() + (Number.isFinite(expiresIn) && expiresIn > 0
           ? expiresIn * 1000
           : 30 * 24 * 60 * 60 * 1000);
-        localStorage.setItem(MATTERMOST_TOKEN_KEY, tokenData.access_token);
+        localStorage.setItem(MATTERMOST_TOKEN_KEY, tokenData.accessToken);
         localStorage.setItem(MATTERMOST_EXPIRY_KEY, String(expiresAt));
+        if (tokenData.baseUrl && tokenData.clientId) {
+          const verifiedConnection = { baseUrl: tokenData.baseUrl, clientId: tokenData.clientId };
+          localStorage.setItem(MATTERMOST_CONNECTION_KEY, JSON.stringify(verifiedConnection));
+          setConnection(verifiedConnection);
+        }
         setConnected(true);
       }).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Mattermost 토큰 요청에 실패했습니다.';
-        alert(`Mattermost 연결 오류: ${message}\n회사 관리자에게 CORS 설정을 확인해주세요.`);
+        alert(`Mattermost 연결 오류: ${message}`);
       }).finally(() => setLoading(false));
     } else if (data?.type === 'MATTERMOST_AUTH_ERROR') {
       setLoading(false);

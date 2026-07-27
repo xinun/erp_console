@@ -11,7 +11,6 @@ import type {
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useAtlassianAuth, type AtlassianConnection } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
-import { searchMattermostFromBrowser } from '@/lib/mattermost';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -376,8 +375,8 @@ function MattermostDrawerContent({
   onConnect,
   onDisconnect,
 }: MattermostDrawerProps) {
-  const [serverUrl, setServerUrl] = useState(connection?.baseUrl ?? '');
-  const [clientId, setClientId] = useState(connection?.clientId ?? '');
+  const [serverUrl, setServerUrl] = useState(connection?.baseUrl ?? process.env.NEXT_PUBLIC_MATTERMOST_URL ?? '');
+  const [clientId, setClientId] = useState(connection?.clientId ?? process.env.NEXT_PUBLIC_MATTERMOST_CLIENT_ID ?? '');
   const [connectError, setConnectError] = useState('');
 
   const handleConnect = async () => {
@@ -926,16 +925,15 @@ export default function SearchPage() {
       }
 
       const mattermostToken = mattermost.getToken();
-      const mattermostRequest = activeSources.includes('mattermost') && mattermostToken && mattermost.baseUrl
-        ? searchMattermostFromBrowser(q, mattermost.baseUrl, mattermostToken)
-        : Promise.resolve([]);
+      if (activeSources.includes('mattermost') && mattermostToken) {
+        serverRequests.push({
+          label: 'Mattermost',
+          request: requestSearch(['mattermost'], { 'x-mattermost-token': mattermostToken }),
+        });
+      }
 
-      const [serverSettled, mattermostSettled] = await Promise.all([
-        Promise.allSettled(serverRequests.map((entry) => entry.request)),
-        Promise.allSettled([mattermostRequest]),
-      ]);
+      const serverSettled = await Promise.allSettled(serverRequests.map((entry) => entry.request));
       const serverResults = serverSettled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
-      const mattermostResults = mattermostSettled[0].status === 'fulfilled' ? mattermostSettled[0].value : [];
       const combinedResults = serverResults.flatMap((data) => data.results);
       const combinedErrors: Record<string, string> = Object.assign({}, ...serverResults.map((data) => data.errors));
       serverSettled.forEach((result, index) => {
@@ -943,18 +941,13 @@ export default function SearchPage() {
           combinedErrors[`connection-${index}`] = `${serverRequests[index].label}: ${result.reason instanceof Error ? result.reason.message : '검색 실패'}`;
         }
       });
-      if (mattermostSettled[0].status === 'rejected') {
-        combinedErrors.mattermost = mattermostSettled[0].reason instanceof Error
-          ? mattermostSettled[0].reason.message
-          : 'Mattermost 검색 실패';
-      }
-      setResults([...combinedResults, ...mattermostResults]);
+      setResults(combinedResults);
       setCounts({
         jira: serverResults.reduce((sum, data) => sum + data.counts.jira, 0),
         confluence: serverResults.reduce((sum, data) => sum + data.counts.confluence, 0),
         jsm: serverResults.reduce((sum, data) => sum + data.counts.jsm, 0),
         drive: serverResults.reduce((sum, data) => sum + data.counts.drive, 0),
-        mattermost: mattermostResults.length,
+        mattermost: serverResults.reduce((sum, data) => sum + data.counts.mattermost, 0),
       });
       setErrors(combinedErrors);
     } catch (error) {

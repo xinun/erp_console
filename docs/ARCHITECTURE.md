@@ -66,9 +66,11 @@ JSM 고객 문의도 `/rest/api/3/search/jql`을 사용한다. 프로젝트 키 
 
 - 클라이언트 훅: `src/hooks/useMattermostAuth.ts`
 - OAuth 콜백: `src/app/api/auth/mattermost/callback/route.ts`
+- 토큰 교환: `src/app/api/auth/mattermost/token/route.ts`
 - PKCE verifier와 state로 OAuth 요청을 검증한다.
 - 연결 정보와 토큰은 현재 브라우저 `localStorage`에 저장한다.
-- 메시지 검색은 `src/lib/mattermost.ts`에서 처리한다.
+- Client Secret은 서버 환경변수에서만 읽으며 브라우저에 전달하지 않는다.
+- 토큰 교환과 메시지 검색은 ERP Console 서버가 Mattermost를 호출한다. 브라우저는 Mattermost CORS 설정에 의존하지 않는다.
 
 ## 환경변수
 
@@ -78,6 +80,11 @@ JSM 고객 문의도 `/rest/api/3/search/jql`을 사용한다. 프로젝트 키 
 NEXT_PUBLIC_ATLASSIAN_CLIENT_ID=
 ATLASSIAN_CLIENT_SECRET=
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=
+MATTERMOST_BASE_URL=
+MATTERMOST_CLIENT_ID=
+MATTERMOST_CLIENT_SECRET=
+NEXT_PUBLIC_MATTERMOST_URL=
+NEXT_PUBLIC_MATTERMOST_CLIENT_ID=
 ```
 
 실제 값은 `.env.local` 또는 배포 환경의 비밀 설정에 저장한다. 저장소에는 커밋하지 않는다.

@@ -237,6 +237,80 @@ async function searchGoogleDrive(
   });
 }
 
+// ─── Mattermost ───────────────────────────────────────────────────────────────
+
+interface MattermostPost {
+  id: string;
+  message?: string;
+  user_id?: string;
+  create_at?: number;
+}
+
+interface MattermostTeam {
+  id: string;
+  name: string;
+  display_name: string;
+}
+
+async function searchMattermost(
+  q: string,
+  accessToken: string,
+  dateRange: DateRange
+): Promise<SearchResult[]> {
+  const baseUrl = process.env.MATTERMOST_BASE_URL?.replace(/\/+$/, '');
+  if (!baseUrl) throw new Error('Mattermost 서버 환경변수가 설정되지 않았습니다.');
+
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/json',
+  };
+  const teamsResponse = await fetch(`${baseUrl}/api/v4/users/me/teams`, {
+    headers,
+    cache: 'no-store',
+  });
+
+  if (!teamsResponse.ok) {
+    throw new Error(`Mattermost 팀 조회 오류 (${teamsResponse.status})`);
+  }
+
+  const teams = await teamsResponse.json() as MattermostTeam[];
+  const groups = await Promise.all(teams.map(async (team) => {
+    const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/posts/search`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terms: q, is_or_search: false }),
+      cache: 'no-store',
+    });
+    if (!response.ok) return [];
+
+    const data = await response.json() as {
+      order?: string[];
+      posts?: Record<string, MattermostPost>;
+    };
+
+    return (data.order ?? []).flatMap((postId): SearchResult[] => {
+      const post = data.posts?.[postId];
+      if (!post) return [];
+      return [{
+        id: post.id,
+        source: 'mattermost',
+        title: `메시지 (${team.display_name})`,
+        snippet: post.message ?? '',
+        url: `${baseUrl}/${team.name}/pl/${post.id}`,
+        author: post.user_id ?? 'Mattermost User',
+        date: new Date(post.create_at ?? 0).toISOString(),
+        team: team.display_name,
+      }];
+    });
+  }));
+
+  const days = dateRange === '1w' ? 7 : dateRange === '1m' ? 30 : dateRange === '3m' ? 90 : null;
+  const cutoff = days ? Date.now() - days * 24 * 60 * 60 * 1000 : null;
+  return groups.flat()
+    .filter((result) => !cutoff || new Date(result.date).getTime() >= cutoff)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -265,6 +339,7 @@ export async function GET(request: NextRequest) {
   const jiraJqlFilter = encodedJqlFilter ? decodeURIComponent(encodedJqlFilter) : undefined;
 
   const googleToken = request.headers.get('x-google-token');
+  const mattermostToken = request.headers.get('x-mattermost-token');
   
   const errors: Record<string, string> = {};
   const allResults: SearchResult[] = [];
@@ -327,6 +402,14 @@ export async function GET(request: NextRequest) {
       searchGoogleDrive(q, googleToken, dateRange)
         .then((r) => { allResults.push(...r); counts.drive = r.length; })
         .catch((e: Error) => { errors.drive = e.message; })
+    );
+  }
+
+  if (sources.includes('mattermost') && mattermostToken) {
+    tasks.push(
+      searchMattermost(q, mattermostToken, dateRange)
+        .then((r) => { allResults.push(...r); counts.mattermost = r.length; })
+        .catch((e: Error) => { errors.mattermost = e.message; })
     );
   }
 

@@ -243,6 +243,7 @@ interface MattermostPost {
   id: string;
   message?: string;
   user_id?: string;
+  channel_id?: string;
   create_at?: number;
 }
 
@@ -250,6 +251,21 @@ interface MattermostTeam {
   id: string;
   name: string;
   display_name: string;
+}
+
+interface MattermostUser {
+  id: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+}
+
+interface MattermostChannel {
+  id: string;
+  name?: string;
+  display_name?: string;
+  type?: string;
 }
 
 async function searchMattermost(
@@ -288,25 +304,62 @@ async function searchMattermost(
       posts?: Record<string, MattermostPost>;
     };
 
-    return (data.order ?? []).flatMap((postId): SearchResult[] => {
+    return (data.order ?? []).flatMap((postId) => {
       const post = data.posts?.[postId];
       if (!post) return [];
-      return [{
-        id: post.id,
-        source: 'mattermost',
-        title: `메시지 (${team.display_name})`,
-        snippet: post.message ?? '',
-        url: `${baseUrl}/${team.name}/pl/${post.id}`,
-        author: post.user_id ?? 'Mattermost User',
-        date: new Date(post.create_at ?? 0).toISOString(),
-        team: team.display_name,
-      }];
+      return [{ post, team }];
     });
   }));
 
+  const matches = groups.flat();
+  const userIds = [...new Set(matches.map(({ post }) => post.user_id).filter((id): id is string => !!id))];
+  const channelIds = [...new Set(matches.map(({ post }) => post.channel_id).filter((id): id is string => !!id))];
+  const [usersResponse, channelsResponse] = await Promise.all([
+    userIds.length > 0
+      ? fetch(`${baseUrl}/api/v4/users/ids`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(userIds),
+          cache: 'no-store',
+        })
+      : null,
+    channelIds.length > 0
+      ? fetch(`${baseUrl}/api/v4/channels/ids`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(channelIds),
+          cache: 'no-store',
+        })
+      : null,
+  ]);
+  const users = usersResponse?.ok ? await usersResponse.json() as MattermostUser[] : [];
+  const channels = channelsResponse?.ok ? await channelsResponse.json() as MattermostChannel[] : [];
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const channelById = new Map(channels.map((channel) => [channel.id, channel]));
+
+  const results: SearchResult[] = matches.map(({ post, team }) => {
+    const user = post.user_id ? userById.get(post.user_id) : undefined;
+    const channel = post.channel_id ? channelById.get(post.channel_id) : undefined;
+    const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
+    const author = fullName || user?.nickname || user?.username || '알 수 없는 사용자';
+    const channelName = channel?.display_name || channel?.name ||
+      (channel?.type === 'D' ? '다이렉트 메시지' : '알 수 없는 채널');
+    return {
+      id: post.id,
+      source: 'mattermost',
+      title: `${author}님의 메시지`,
+      snippet: post.message ?? '',
+      url: `${baseUrl}/${team.name}/pl/${post.id}`,
+      author,
+      date: new Date(post.create_at ?? 0).toISOString(),
+      team: team.display_name,
+      channelName,
+    };
+  });
+
   const days = dateRange === '1w' ? 7 : dateRange === '1m' ? 30 : dateRange === '3m' ? 90 : null;
   const cutoff = days ? Date.now() - days * 24 * 60 * 60 * 1000 : null;
-  return groups.flat()
+  return results
     .filter((result) => !cutoff || new Date(result.date).getTime() >= cutoff)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }

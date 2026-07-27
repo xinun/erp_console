@@ -174,9 +174,10 @@ function ResultCard({ result }: { result: SearchResult }) {
   } else if (result.source === 'confluence') {
     if (result.space) meta.push(result.space);
   } else if (result.source === 'mattermost') {
+    if (result.channelName) meta.push(result.channelName);
     if (result.team) meta.push(result.team);
   }
-  if (result.author) meta.push(result.author);
+  if (result.author && result.source !== 'mattermost') meta.push(result.author);
   if (result.date) meta.push(formatDate(result.date));
 
   return (

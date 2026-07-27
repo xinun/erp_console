@@ -767,6 +767,7 @@ export default function SearchPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
   const [filters, setFilters] = useState<SearchFilters>({
     sources: ['jira', 'confluence'],
     dateRange: 'all',
@@ -804,6 +805,7 @@ export default function SearchPage() {
     setSubmittedQuery(q);
     setErrors({});
     setResults([]);
+    setResultSource('all');
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
 
     try {
@@ -900,13 +902,20 @@ export default function SearchPage() {
   };
 
   const totalCount = counts.jira + counts.confluence + counts.jsm + counts.drive + counts.mattermost;
-  const countSummary = [
-    counts.jira > 0 ? `Jira ${counts.jira}` : null,
-    counts.confluence > 0 ? `Confluence ${counts.confluence}` : null,
-    counts.jsm > 0 ? `고객 문의 ${counts.jsm}` : null,
-    counts.drive > 0 ? `Drive ${counts.drive}` : null,
-    (counts.mattermost || 0) > 0 ? `Mattermost ${counts.mattermost}` : null,
-  ].filter(Boolean);
+  const allResultSourceOptions: { value: 'all' | SearchSource; label: string; count: number }[] = [
+    { value: 'all', label: '전체', count: totalCount },
+    { value: 'jira', label: 'Jira', count: counts.jira },
+    { value: 'confluence', label: 'Confluence', count: counts.confluence },
+    { value: 'jsm', label: '고객 문의', count: counts.jsm },
+    { value: 'drive', label: 'Drive', count: counts.drive },
+    { value: 'mattermost', label: 'Mattermost', count: counts.mattermost },
+  ];
+  const resultSourceOptions = allResultSourceOptions.filter(
+    (option) => option.value === 'all' || option.count > 0
+  );
+  const visibleResults = resultSource === 'all'
+    ? results
+    : results.filter((result) => result.source === resultSource);
 
   const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
   const jsmConnected = atlassianAuth.getConnections('jsm').length > 0;
@@ -1090,14 +1099,33 @@ export default function SearchPage() {
             {/* Results */}
             {!isLoading && hasSearched && (
               <>
-                <div className="flex items-center gap-3 mb-3">
+                <div className="mb-3">
                   <p className="text-sm text-gray-600">
                     <span className="font-semibold text-gray-900">&apos;{submittedQuery}&apos;</span>{' '}
                     검색 결과{' '}
                     <span className="font-semibold text-blue-600">{totalCount}건</span>
                   </p>
-                  {countSummary.length > 0 && (
-                    <p className="text-xs text-gray-400">{countSummary.join(' · ')}</p>
+                  {totalCount > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="결과 서비스 필터">
+                      {resultSourceOptions.map((option) => {
+                        const active = resultSource === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setResultSource(option.value)}
+                            aria-pressed={active}
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                              active
+                                ? 'border-slate-800 bg-slate-800 text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700'
+                            }`}
+                          >
+                            {option.label} <span className={active ? 'text-slate-300' : 'text-slate-400'}>{option.count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
 
@@ -1115,9 +1143,9 @@ export default function SearchPage() {
                   </div>
                 )}
 
-                {results.length > 0 ? (
+                {visibleResults.length > 0 ? (
                   <div className="space-y-2">
-                    {results.map((result) => (
+                    {visibleResults.map((result) => (
                       <ResultCard key={`${result.source}-${result.id}`} result={result} />
                     ))}
                   </div>

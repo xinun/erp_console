@@ -203,7 +203,7 @@ export function useAtlassianAuth() {
     sessionStorage.setItem(STATE_KEY, state);
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(options));
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/auth/atlassian/callback`);
-    const scopes = encodeURIComponent('read:jira-work read:confluence-content.all search:confluence read:servicedesk-request read:me offline_access');
+    const scopes = encodeURIComponent('read:jira-work read:confluence-content.all search:confluence read:me offline_access');
     const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${encodeURIComponent(state)}&response_type=code&prompt=consent`;
     const popup = window.open(authUrl, 'AtlassianAuth', 'width=500,height=700');
     if (!popup) {

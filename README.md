@@ -1,10 +1,12 @@
 # 사내 통합검색 (ERP Console)
 
-Jira, Confluence, Google Workspace(Drive, Docs 등)의 데이터를 한 곳에서 통합하여 검색할 수 있는 사내 통합검색 시스템입니다.
+Jira, Confluence, Jira Service Management(JSM), Google Workspace(Drive, Docs 등)의 데이터를 한 곳에서 통합하여 검색할 수 있는 사내 통합검색 시스템입니다.
 
 ## 기능
-- **Atlassian 연동**: Jira 이슈 및 Confluence 페이지 통합 검색 (OAuth 2.0 또는 API Token 방식 지원)
+- **Atlassian 연동**: Jira 이슈, Confluence 페이지 및 JSM 고객 문의 통합 검색 (OAuth 2.0 지원)
 - **Google Workspace 연동**: Google Drive, Docs, Sheets, Slides 파일 검색 (OAuth 2.0 지원)
+
+JSM 고객 문의는 Jira의 이슈 검색 API와 프로젝트/JQL 필터를 사용하므로 별도의 Jira Service Management API 권한은 필요하지 않습니다.
 
 ## 개발 서버 실행 방법
 
@@ -44,13 +46,17 @@ ATLASSIAN_CLIENT_SECRET=여기에_발급받은_Client_Secret_입력
     *   `search:confluence` (검색 기능을 위해 필수!)
 *   **User identity API**
     *   `read:me`
-    *   `offline_access` (자동 로그인을 위한 리프레시 토큰 발급)
+
+OAuth 인증 요청에는 리프레시 토큰 발급을 위한 `offline_access`도 포함됩니다. 이 값은 Permissions 화면에서 별도의 API 권한으로 추가하지 않습니다.
 
 #### B. 콜백 주소(Authorization) 등록
 좌측 메뉴의 **Authorization** 메뉴에서 `OAuth 2.0 (3LO)` 항목을 추가(Add)합니다.
 `Callback URL` 항목에 정확히 아래 주소를 입력하고 저장합니다.
 *   `http://localhost:3000/api/auth/atlassian/callback`
+*   `https://erp-console.vercel.app/api/auth/atlassian/callback`
 *(주의: 브라우저 주소창이 `127.0.0.1:3000`인 상태로 로그인을 시도하면 콜백 주소 불일치 에러가 발생합니다.)*
+
+Vercel 미리보기 배포 주소를 사용하는 경우 해당 배포 주소의 콜백 URL도 별도로 등록해야 합니다. 평소에는 고정 운영 주소인 `https://erp-console.vercel.app`을 사용하세요.
 
 #### C. Client ID 및 Secret 확인
 좌측 메뉴의 **Settings** 메뉴로 이동하여 `Client ID`와 `Secret` 값을 복사한 뒤, 1번의 `.env.local` 파일에 붙여넣습니다.

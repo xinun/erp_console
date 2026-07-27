@@ -5,7 +5,7 @@ import type { SearchResult, SearchResponse, DateRange } from '@/lib/types';
 
 function extractAdfText(description: unknown): string {
   if (!description) return '';
-  if (typeof description === 'string') return description.slice(0, 300);
+  if (typeof description === 'string') return description;
   if (typeof description === 'object' && description !== null) {
     const adf = description as Record<string, unknown>;
     if (Array.isArray(adf.content)) {
@@ -20,7 +20,7 @@ function extractAdfText(description: unknown): string {
         }
       }
       traverse(adf.content as unknown[]);
-      return texts.join(' ').slice(0, 300);
+      return texts.join(' ');
     }
   }
   return '';
@@ -32,6 +32,23 @@ function stripHtmlAndMarkers(text: string): string {
     .replace(/@@@endhl@@@/g, '')
     .replace(/<[^>]+>/g, '')
     .trim();
+}
+
+function getContextSnippet(text: string, query: string): string {
+  const normalizedText = text.replace(/\s+/g, ' ').trim();
+  if (!normalizedText) return '';
+  const lowerText = normalizedText.toLocaleLowerCase();
+  const candidates = [query.trim(), ...query.trim().split(/\s+/)]
+    .filter((candidate, index, values) => candidate.length > 1 && values.indexOf(candidate) === index)
+    .sort((a, b) => b.length - a.length);
+  const matchIndex = candidates
+    .map((candidate) => lowerText.indexOf(candidate.toLocaleLowerCase()))
+    .find((index) => index >= 0);
+  if (matchIndex === undefined) return normalizedText.slice(0, 280);
+
+  const start = Math.max(0, matchIndex - 90);
+  const end = Math.min(normalizedText.length, matchIndex + 190);
+  return `${start > 0 ? '…' : ''}${normalizedText.slice(start, end)}${end < normalizedText.length ? '…' : ''}`;
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -112,11 +129,13 @@ async function searchJira(
     const issueType = fields.issuetype as Record<string, string> | null;
     const project = fields.project as Record<string, string> | null;
 
+    const contentText = extractAdfText(fields.description);
     return {
       id: issue.id as string,
       source,
       title: fields.summary as string,
-      snippet: extractAdfText(fields.description),
+      snippet: contentText,
+      content: contentText,
       url: `${authConfig.baseUrl}/browse/${issue.key}`,
       key: issue.key as string,
       author: assignee?.displayName ?? '미배정',
@@ -349,6 +368,7 @@ async function searchMattermost(
       source: 'mattermost',
       title: `${author}님의 메시지`,
       snippet: post.message ?? '',
+      content: post.message ?? '',
       url: `${baseUrl}/${team.name}/pl/${post.id}`,
       author,
       date: new Date(post.create_at ?? 0).toISOString(),
@@ -472,7 +492,7 @@ export async function GET(request: NextRequest) {
 
   await Promise.all(tasks);
 
-  const results = excludedKeywords.length === 0
+  const filteredResults = excludedKeywords.length === 0
     ? allResults
     : allResults.filter((result) => {
         const searchableText = [
@@ -485,6 +505,10 @@ export async function GET(request: NextRequest) {
         ].filter(Boolean).join(' ').toLocaleLowerCase();
         return !excludedKeywords.some((keyword) => searchableText.includes(keyword));
       });
+  const results = filteredResults.map((result) => ({
+    ...result,
+    snippet: getContextSnippet(result.snippet, q),
+  }));
   const filteredCounts = {
     jira: results.filter((result) => result.source === 'jira').length,
     confluence: results.filter((result) => result.source === 'confluence').length,

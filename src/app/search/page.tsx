@@ -162,9 +162,36 @@ function SourceBadge({ source, fileType }: { source: SearchSource; fileType?: st
   );
 }
 
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const terms = query.trim().split(/\s+/).filter((term) => term.length > 1);
+  if (terms.length === 0) return text;
+  const pattern = terms
+    .sort((a, b) => b.length - a.length)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const parts = text.split(new RegExp(`(${pattern})`, 'gi'));
+  const normalizedTerms = new Set(terms.map((term) => term.toLocaleLowerCase()));
+
+  return parts.map((part, index) =>
+    normalizedTerms.has(part.toLocaleLowerCase()) ? (
+      <mark key={`${part}-${index}`} className="rounded-sm bg-amber-100 px-0.5 text-inherit">
+        {part}
+      </mark>
+    ) : part
+  );
+}
+
 // ─── Result Card ──────────────────────────────────────────────────────────────
 
-function ResultCard({ result }: { result: SearchResult }) {
+function ResultCard({
+  result,
+  query,
+  onPreview,
+}: {
+  result: SearchResult;
+  query: string;
+  onPreview: (result: SearchResult) => void;
+}) {
   const meta: string[] = [];
   if (result.source === 'jira' || result.source === 'jsm') {
     if (result.key) meta.push(result.key);
@@ -187,16 +214,17 @@ function ResultCard({ result }: { result: SearchResult }) {
           <div className="mb-1.5">
             <SourceBadge source={result.source} fileType={result.fileType} />
           </div>
-          <a
-            href={result.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-sm font-semibold text-gray-900 hover:text-blue-600 leading-snug mb-1.5"
+          <button
+            type="button"
+            onClick={() => onPreview(result)}
+            className="mb-1.5 block w-full text-left text-sm font-semibold leading-snug text-gray-900 hover:text-blue-600 focus-visible:outline-none focus-visible:underline"
           >
-            {result.title}
-          </a>
+            <HighlightedText text={result.title} query={query} />
+          </button>
           {result.snippet && (
-            <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{result.snippet}</p>
+            <p className="line-clamp-3 text-xs leading-relaxed text-gray-500">
+              <HighlightedText text={result.snippet} query={query} />
+            </p>
           )}
           {meta.length > 0 && (
             <div className="flex flex-wrap items-center mt-2">
@@ -209,15 +237,89 @@ function ResultCard({ result }: { result: SearchResult }) {
             </div>
           )}
         </div>
-        <a
-          href={result.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5"
+        <button
+          type="button"
+          onClick={() => onPreview(result)}
+          className="mt-0.5 flex flex-shrink-0 items-center gap-1 text-xs text-gray-400 opacity-0 transition-opacity hover:text-blue-600 group-hover:opacity-100 focus-visible:opacity-100"
         >
-          열기 <IconExternalLink />
-        </a>
+          미리보기 <IconChevronRight />
+        </button>
       </div>
+    </div>
+  );
+}
+
+function ResultPreview({
+  result,
+  query,
+  onClose,
+}: {
+  result: SearchResult;
+  query: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-5">
+      <button
+        type="button"
+        aria-label="미리보기 닫기"
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-950/35 backdrop-blur-[1px]"
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="result-preview-title"
+        className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+      >
+        <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-4">
+          <div className="min-w-0 flex-1">
+            <SourceBadge source={result.source} fileType={result.fileType} />
+            <h2 id="result-preview-title" className="mt-2 text-base font-semibold leading-snug text-slate-900">
+              <HighlightedText text={result.title} query={query} />
+            </h2>
+            <p className="mt-1 text-xs text-slate-400">
+              {[result.key, result.channelName, result.project, result.space, result.team, result.author, result.date ? formatDate(result.date) : '']
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="닫기"
+          >
+            <IconClose />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 py-5">
+          {(result.content || result.snippet) ? (
+            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-600">
+              <HighlightedText text={result.content || result.snippet} query={query} />
+            </p>
+          ) : (
+            <p className="py-8 text-center text-sm text-slate-400">미리 볼 수 있는 본문이 없습니다.</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            닫기
+          </button>
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+          >
+            원문 열기 <IconExternalLink />
+          </a>
+        </div>
+      </section>
     </div>
   );
 }
@@ -768,6 +870,7 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
+  const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
     sources: ['jira', 'confluence'],
     dateRange: 'all',
@@ -806,6 +909,7 @@ export default function SearchPage() {
     setErrors({});
     setResults([]);
     setResultSource('all');
+    setPreviewResult(null);
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
 
     try {
@@ -1146,7 +1250,12 @@ export default function SearchPage() {
                 {visibleResults.length > 0 ? (
                   <div className="space-y-2">
                     {visibleResults.map((result) => (
-                      <ResultCard key={`${result.source}-${result.id}`} result={result} />
+                      <ResultCard
+                        key={`${result.source}-${result.id}`}
+                        result={result}
+                        query={submittedQuery}
+                        onPreview={setPreviewResult}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -1192,6 +1301,13 @@ export default function SearchPage() {
         mattermost={mattermost}
         onClose={() => setActiveDrawer(null)}
       />
+      {previewResult && (
+        <ResultPreview
+          result={previewResult}
+          query={submittedQuery}
+          onClose={() => setPreviewResult(null)}
+        />
+      )}
     </div>
   );
 }

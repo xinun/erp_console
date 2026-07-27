@@ -13,6 +13,7 @@ export interface SearchResult {
   source: SearchSource;
   title: string;
   snippet: string;
+  content?: string;
   url: string;
   author: string;
   date: string;

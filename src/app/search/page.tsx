@@ -403,22 +403,39 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
                   <p className="text-sm font-semibold text-slate-800">{preset.label}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">{preset.siteUrl || '사이트 URL 환경변수 설정 필요'}</p>
                   <p className="mt-2 text-xs text-slate-600">{preset.accountHint}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-amber-700">OAuth 동의 화면에서 로그아웃하면 연결 요청이 중단됩니다. 먼저 아래 1단계에서 계정을 바꿔주세요.</p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
                   {connected ? '연결됨' : '미연결'}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => connectPreset(preset)}
-                disabled={atlassianAuth.loading || !preset.siteUrl}
-                className="mt-3 h-9 w-full rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {connected ? '다른 계정으로 다시 연결' : `${preset.label} 계정 연결`}
-              </button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <a
+                  href={preset.siteUrl || undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-disabled={!preset.siteUrl}
+                  className={`flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-100 ${!preset.siteUrl ? 'pointer-events-none opacity-50' : ''}`}
+                >
+                  1. 계정 확인·전환
+                </a>
+                <button
+                  type="button"
+                  onClick={() => connectPreset(preset)}
+                  disabled={atlassianAuth.loading || !preset.siteUrl}
+                  className="h-9 rounded-lg bg-blue-600 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  2. {connected ? '다시 연결' : '권한 연결'}
+                </button>
+              </div>
             </div>
           );
         })}
+        {atlassianAuth.loading && (
+          <button type="button" onClick={atlassianAuth.cancelConnect} className="w-full text-xs font-medium text-slate-500 hover:text-red-600">
+            중단된 연결 취소
+          </button>
+        )}
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>}
       {isJsm && <div className="space-y-3 border-t border-gray-100 pt-4">

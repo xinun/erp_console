@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const CONNECTIONS_KEY = 'mantech_atlassian_connections';
 const PENDING_KEY = 'mantech_atlassian_pending_connection';
@@ -59,7 +59,25 @@ function readConnections(): AtlassianConnection[] {
 export function useAtlassianAuth() {
   const [connections, setConnections] = useState<AtlassianConnection[]>([]);
   const [loading, setLoading] = useState(false);
+  const authPopupRef = useRef<Window | null>(null);
+  const popupWatcherRef = useRef<number | null>(null);
   const clientId = process.env.NEXT_PUBLIC_ATLASSIAN_CLIENT_ID ?? '';
+
+  const clearPendingAuth = useCallback(() => {
+    if (popupWatcherRef.current !== null) {
+      window.clearInterval(popupWatcherRef.current);
+      popupWatcherRef.current = null;
+    }
+    sessionStorage.removeItem(STATE_KEY);
+    sessionStorage.removeItem(PENDING_KEY);
+    authPopupRef.current = null;
+    setLoading(false);
+  }, []);
+
+  const cancelConnect = useCallback(() => {
+    authPopupRef.current?.close();
+    clearPendingAuth();
+  }, [clearPendingAuth]);
 
   const saveConnections = useCallback((next: AtlassianConnection[]) => {
     localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(next));
@@ -189,12 +207,12 @@ export function useAtlassianAuth() {
         : [...existing, nextConnection];
       localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(next));
       setConnections(next);
-      setLoading(false);
+      clearPendingAuth();
     } else if (data?.type === 'ATLASSIAN_AUTH_ERROR') {
-      setLoading(false);
+      clearPendingAuth();
       alert(`Atlassian 연결 오류: ${data.error}`);
     }
-  }, []);
+  }, [clearPendingAuth]);
 
   useEffect(() => {
     return () => window.removeEventListener('message', handleMessage);
@@ -217,15 +235,25 @@ export function useAtlassianAuth() {
     sessionStorage.setItem(STATE_KEY, state);
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(options));
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/auth/atlassian/callback`);
-    const scopes = encodeURIComponent('read:jira-work read:confluence-content.all search:confluence read:me offline_access');
+    const requestedProducts = options.kind === 'jsm' ? ['jira'] : options.products ?? ['jira', 'confluence'];
+    const scopes = encodeURIComponent([
+      ...(requestedProducts.includes('jira') ? ['read:jira-work'] : []),
+      ...(requestedProducts.includes('confluence') ? ['read:confluence-content.all', 'search:confluence'] : []),
+      'read:me',
+      'offline_access',
+    ].join(' '));
     const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${encodeURIComponent(state)}&response_type=code&prompt=consent`;
     const popup = window.open(authUrl, 'AtlassianAuth', 'width=500,height=700');
     if (!popup) {
       setLoading(false);
       return '팝업이 차단되었습니다.';
     }
+    authPopupRef.current = popup;
+    popupWatcherRef.current = window.setInterval(() => {
+      if (popup.closed) clearPendingAuth();
+    }, 500);
     return null;
-  }, [clientId, handleMessage]);
+  }, [clientId, clearPendingAuth, handleMessage]);
 
   const disconnect = useCallback((id?: string) => {
     const next = id ? readConnections().filter((connection) => connection.id !== id) : [];
@@ -243,6 +271,7 @@ export function useAtlassianAuth() {
     connections,
     hasClientId: !!clientId,
     connect,
+    cancelConnect,
     disconnect,
     getConnections,
   };

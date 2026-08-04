@@ -64,6 +64,8 @@ Atlassian OAuth의 `redirect_uri`는 브라우저의 현재 origin과 `/api/auth
 - 최초에는 Jira와 Confluence 로그인이 각각 한 번 필요하다.
 - 이후에는 각 refresh token으로 자동 갱신한다.
 - 사이트 URL은 공개 환경변수로 관리한다.
+- 계정 전환은 OAuth 동의 화면이 아니라 대상 Atlassian 사이트에서 먼저 수행한다.
+- 제품별 연결은 해당 제품에 필요한 OAuth scope만 요청한다.
 
 ```md
 ## YYYY-MM-DD: 결정 제목

@@ -14,6 +14,9 @@
 - OAuth 완료 시 연결된 Atlassian 계정 이름과 이메일을 표시하도록 추가했다.
 - Jira 전용 연결에는 Jira 검색만, Confluence 전용 연결에는 Confluence 검색만 요청하도록 변경했다.
 - `NEXT_PUBLIC_ATLASSIAN_JIRA_SITE_URL`, `NEXT_PUBLIC_ATLASSIAN_CONFLUENCE_SITE_URL` 환경변수를 추가했다.
+- 서로 다른 Atlassian 계정 전환 시 OAuth 동의 화면 안에서 로그아웃하지 않도록, 대상 사이트에서 계정을 먼저 확인·전환한 뒤 OAuth를 시작하는 2단계 UI로 변경했다.
+- Jira 연결은 Jira scope만, Confluence 연결은 Confluence scope만 요청하도록 최소 권한으로 분리했다.
+- OAuth 팝업을 닫거나 사용자가 취소하면 연결 대기 상태가 자동으로 해제되도록 보완했다.
 
 - 검색 결과 요약을 검색어 주변 문맥으로 생성하고 검색어를 강조 표시하도록 개선했다.
 - 결과 클릭 시 ERP Console 내부 미리보기를 먼저 열고 사용자가 선택할 때만 원문을 새 탭으로 열도록 변경했다.

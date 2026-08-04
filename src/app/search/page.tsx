@@ -393,7 +393,9 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
         </div>
       ))}
       {!isJsm && <div className="space-y-3 border-t border-gray-100 pt-4">
-        <p className="text-xs leading-5 text-slate-500">두 서비스는 사용하는 계정이 다릅니다. 각 카드에서 안내된 계정을 선택하면 이후에는 자동으로 갱신됩니다.</p>
+        <div className="rounded-lg bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-800">
+          OAuth는 각 Jira 사이트가 아니라 Atlassian 중앙 계정 세션을 사용합니다. 1단계 화면에서 프로필 메뉴를 열어 로그아웃한 뒤 사용할 계정으로 로그인하고, ERP Console로 돌아와 2단계를 진행하세요.
+        </div>
         {presets.map((preset) => {
           const connected = connections.some((connection) => connection.products?.includes(preset.product));
           return (
@@ -403,7 +405,7 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
                   <p className="text-sm font-semibold text-slate-800">{preset.label}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">{preset.siteUrl || '사이트 URL 환경변수 설정 필요'}</p>
                   <p className="mt-2 text-xs text-slate-600">{preset.accountHint}</p>
-                  <p className="mt-1 text-[11px] leading-4 text-amber-700">OAuth 동의 화면에서 로그아웃하면 연결 요청이 중단됩니다. 먼저 아래 1단계에서 계정을 바꿔주세요.</p>
+                  <p className="mt-1 text-[11px] leading-4 text-amber-700">2단계에서 잘못된 계정이 보이면 창을 닫으세요. OAuth 창 안에서 로그아웃하면 연결 요청이 중단됩니다.</p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
                   {connected ? '연결됨' : '미연결'}
@@ -411,13 +413,12 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <a
-                  href={preset.siteUrl || undefined}
+                  href="https://id.atlassian.com/manage-profile"
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-disabled={!preset.siteUrl}
-                  className={`flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-100 ${!preset.siteUrl ? 'pointer-events-none opacity-50' : ''}`}
+                  className="flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-100"
                 >
-                  1. 계정 확인·전환
+                  1. 중앙 계정 전환
                 </a>
                 <button
                   type="button"

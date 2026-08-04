@@ -18,6 +18,7 @@ import { useMattermostAuth } from '@/hooks/useMattermostAuth';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DrawerType = 'atlassian' | 'google' | 'mattermost' | null;
+type ThemePreference = 'light' | 'dark' | 'system';
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,14 @@ function IconArrowUp() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="m6 15 6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconTheme() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1307,6 +1316,8 @@ export default function SearchPage() {
 
   const [activeDrawer, setActiveDrawer] = useState<DrawerType>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [query, setQuery] = useState('');
   const [excludedKeywords, setExcludedKeywords] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
@@ -1336,6 +1347,24 @@ export default function SearchPage() {
     inputRef.current?.focus();
     return () => searchAbortRef.current?.abort();
   }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('erp-console-theme');
+    if (stored === 'light' || stored === 'dark' || stored === 'system') setThemePreference(stored);
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyTheme = () => {
+      const dark = themePreference === 'dark' || (themePreference === 'system' && media.matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    };
+    localStorage.setItem('erp-console-theme', themePreference);
+    applyTheme();
+    if (themePreference === 'system') media.addEventListener('change', applyTheme);
+    return () => media.removeEventListener('change', applyTheme);
+  }, [themePreference]);
 
   const toggleSource = (source: SearchSource) => {
     const next = filters.sources.includes(source)
@@ -1552,10 +1581,52 @@ export default function SearchPage() {
           </div>
           <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
         </div>
-        <div className="relative">
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowThemeMenu((current) => !current);
+                setShowProfile(false);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              aria-label="테마 선택"
+              aria-expanded={showThemeMenu}
+            >
+              <IconTheme />
+            </button>
+            {showThemeMenu && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-40 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+                {([
+                  ['light', '라이트'],
+                  ['dark', '다크'],
+                  ['system', '시스템 설정'],
+                ] as Array<[ThemePreference, string]>).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setThemePreference(value);
+                      setShowThemeMenu(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                      themePreference === value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    {label}
+                    {themePreference === value ? <IconCheck /> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="relative">
           <button
             type="button"
-            onClick={() => setShowProfile((current) => !current)}
+            onClick={() => {
+              setShowProfile((current) => !current);
+              setShowThemeMenu(false);
+            }}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-xs font-semibold text-white hover:bg-gray-700"
             aria-label="사용자 프로필"
           >
@@ -1587,6 +1658,7 @@ export default function SearchPage() {
               <p className="mt-2 text-[11px] leading-relaxed text-gray-400">연결 정보는 현재 브라우저에만 저장됩니다.</p>
             </div>
           )}
+          </div>
         </div>
       </header>
 
@@ -1601,7 +1673,7 @@ export default function SearchPage() {
         />
 
         {/* Main */}
-        <main ref={mainScrollRef} className="relative flex-1 overflow-y-auto bg-[#F4F5F7]">
+        <main ref={mainScrollRef} className="theme-page-background relative flex-1 overflow-y-auto bg-[#F4F5F7]">
           <div className="max-w-3xl mx-auto px-6 py-6">
             {/* Search and filters */}
             <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">

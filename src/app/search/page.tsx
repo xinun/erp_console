@@ -247,23 +247,49 @@ function ResultScrollTools({
     element.scrollTo({ top: ratio * Math.max(0, element.scrollHeight - element.clientHeight) });
   };
 
-  const sampledResults = results.filter((_, index) => {
-    const interval = Math.max(1, Math.ceil(results.length / 100));
-    return index % interval === 0;
-  });
-  const sourceColor: Record<SearchSource, string> = {
-    jira: 'bg-blue-500',
-    confluence: 'bg-cyan-500',
-    jsm: 'bg-indigo-500',
-    drive: 'bg-emerald-500',
-    mattermost: 'bg-rose-500',
+  const serviceLabels: Record<SearchSource, string> = {
+    jira: 'Jira',
+    confluence: 'Confluence',
+    jsm: '고객 문의',
+    drive: 'Google Drive',
+    mattermost: 'Mattermost',
+  };
+  const serviceCounts = results.reduce<Partial<Record<SearchSource, number>>>((counts, result) => {
+    counts[result.source] = (counts[result.source] ?? 0) + 1;
+    return counts;
+  }, {});
+  const visibleServices = (Object.keys(serviceCounts) as SearchSource[]).filter((source) => serviceCounts[source]);
+
+  const scrollToService = (source: SearchSource) => {
+    const element = scrollContainer.current;
+    const target = element?.querySelector<HTMLElement>(`[data-result-source="${source}"]`);
+    if (!element || !target) return;
+    const top = target.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop - 88;
+    element.scrollTo({ top, behavior: 'smooth' });
   };
 
   return (
     <>
       {results.length > 5 && (
-        <div className="fixed right-5 top-1/2 z-20 hidden -translate-y-1/2 xl:block">
-          <div className="rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-lg backdrop-blur" title="클릭하거나 드래그해 결과 위치 이동">
+        <div className="group fixed right-4 top-1/2 z-20 hidden -translate-y-1/2 items-center xl:flex">
+          <div className="pointer-events-none absolute right-full mr-3 w-44 translate-x-2 rounded-xl border border-black/10 bg-white/90 p-2 opacity-0 shadow-xl backdrop-blur transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100">
+            <div className="mb-1 flex items-center justify-between px-2 py-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40">결과 이동</span>
+              <span className="text-[10px] tabular-nums text-black/40">{results.length}</span>
+            </div>
+            {visibleServices.map((source) => (
+              <button
+                key={source}
+                type="button"
+                onClick={() => scrollToService(source)}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-black/65 transition-colors hover:bg-black hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+              >
+                <span className="font-medium">{serviceLabels[source]}</span>
+                <span className="tabular-nums opacity-60">{serviceCounts[source]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="rounded-full bg-white/50 p-3 backdrop-blur-sm transition-colors group-hover:bg-white/80" title="클릭하거나 드래그해 결과 위치 이동">
             <div
               ref={trackRef}
               role="slider"
@@ -294,13 +320,11 @@ function ResultScrollTools({
                 if (event.key === 'Home') element.scrollTo({ top: 0, behavior: 'smooth' });
                 if (event.key === 'End') element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
               }}
-              className="relative flex h-64 w-3 touch-none cursor-ns-resize flex-col gap-px overflow-hidden rounded-full bg-slate-100 p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="relative h-56 w-1.5 touch-none cursor-ns-resize rounded-full bg-black/10 outline-none transition-colors hover:bg-black/15 focus-visible:ring-2 focus-visible:ring-black/60"
             >
-              {sampledResults.map((result, index) => (
-                <span key={`${result.source}-${result.id}-${index}`} className={`min-h-px flex-1 rounded-full ${sourceColor[result.source]}`} />
-              ))}
+              <span className="pointer-events-none absolute inset-x-0 top-0 rounded-full bg-black/25" style={{ height: `${progress * 100}%` }} />
               <span
-                className="pointer-events-none absolute left-1/2 h-3 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-900 shadow-md"
+                className="pointer-events-none absolute left-1/2 h-5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 bg-black shadow-md"
                 style={{ top: `${progress * 100}%` }}
               />
             </div>
@@ -365,6 +389,7 @@ function ResultCard({
       }}
       className="group h-full cursor-pointer rounded-xl border border-slate-200 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       aria-label={`${result.title} 미리보기`}
+      data-result-source={result.source}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">

@@ -15,12 +15,15 @@ function extractAdfText(description: unknown): string {
           if (typeof node === 'object' && node !== null) {
             const n = node as Record<string, unknown>;
             if (n.type === 'text' && typeof n.text === 'string') texts.push(n.text);
+            if (n.type === 'hardBreak') texts.push('\n');
+            if (n.type === 'listItem') texts.push('• ');
             if (Array.isArray(n.content)) traverse(n.content as unknown[]);
+            if (['paragraph', 'heading', 'listItem', 'blockquote', 'codeBlock'].includes(String(n.type))) texts.push('\n');
           }
         }
       }
       traverse(adf.content as unknown[]);
-      return texts.join(' ');
+      return texts.join('').replace(/\n{3,}/g, '\n\n').trim();
     }
   }
   return '';
@@ -100,7 +103,7 @@ async function searchJira(
   const params = new URLSearchParams({
     jql,
     maxResults: '20',
-    fields: 'summary,description,status,assignee,updated,issuetype,project',
+    fields: 'summary,description,status,assignee,reporter,priority,labels,comment,created,updated,issuetype,project',
   });
 
   const url = authConfig.type === 'basic'
@@ -125,9 +128,25 @@ async function searchJira(
   return (data.issues ?? []).map((issue: Record<string, unknown>) => {
     const fields = issue.fields as Record<string, unknown>;
     const assignee = fields.assignee as Record<string, string> | null;
+    const reporter = fields.reporter as Record<string, string> | null;
+    const priority = fields.priority as Record<string, string> | null;
     const status = fields.status as Record<string, string> | null;
     const issueType = fields.issuetype as Record<string, string> | null;
     const project = fields.project as Record<string, string> | null;
+    const commentPage = fields.comment as { total?: number; comments?: Array<Record<string, unknown>> } | null;
+    const comments = (commentPage?.comments ?? []).map((comment) => {
+      const commentAuthor = comment.author as Record<string, string> | undefined;
+      return {
+        id: String(comment.id ?? ''),
+        author: commentAuthor?.displayName ?? '알 수 없음',
+        avatarUrl: commentAuthor?.avatarUrls
+          ? (commentAuthor.avatarUrls as unknown as Record<string, string>)['48x48']
+          : undefined,
+        body: extractAdfText(comment.body),
+        created: String(comment.created ?? ''),
+        updated: comment.updated ? String(comment.updated) : undefined,
+      };
+    });
 
     const contentText = extractAdfText(fields.description);
     return {
@@ -143,6 +162,11 @@ async function searchJira(
       status: status?.name ?? '',
       issueType: issueType?.name ?? '',
       project: project?.name ?? '',
+      reporter: reporter?.displayName ?? '',
+      priority: priority?.name ?? '',
+      labels: Array.isArray(fields.labels) ? fields.labels.map(String) : [],
+      comments,
+      commentsTotal: commentPage?.total ?? comments.length,
     };
   });
 }

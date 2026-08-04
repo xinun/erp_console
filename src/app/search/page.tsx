@@ -14,7 +14,7 @@ import { useMattermostAuth } from '@/hooks/useMattermostAuth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type DrawerType = 'atlassian' | 'google' | 'jsm' | 'mattermost' | null;
+type DrawerType = 'atlassian' | 'google' | 'mattermost' | null;
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -123,14 +123,6 @@ function IconService({ type }: { type: NonNullable<DrawerType> }) {
       <svg className={iconClass} viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path d="M3 4.25h10v6.5H7.2L4.25 13v-2.25H3v-6.5Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
         <path d="M5.25 7.5h5.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (type === 'jsm') {
-    return (
-      <svg className={iconClass} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M4 3.25h8v9.5H4v-9.5Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
-        <path d="M6 6h4M6 8.5h2.75" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
       </svg>
     );
   }
@@ -258,6 +250,8 @@ function ResultPreview({
   query: string;
   onClose: () => void;
 }) {
+  const isJira = result.source === 'jira' || result.source === 'jsm';
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-5">
       <button
@@ -270,14 +264,17 @@ function ResultPreview({
         role="dialog"
         aria-modal="true"
         aria-labelledby="result-preview-title"
-        className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className={`relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${isJira ? 'max-w-5xl' : 'max-w-2xl'}`}
       >
         <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0 flex-1">
             <SourceBadge source={result.source} fileType={result.fileType} />
-            <h2 id="result-preview-title" className="mt-2 text-base font-semibold leading-snug text-slate-900">
-              <HighlightedText text={result.title} query={query} />
-            </h2>
+            <a href={result.url} target="_blank" rel="noopener noreferrer" className="group/title mt-2 flex w-fit items-center gap-2">
+              <h2 id="result-preview-title" className="text-base font-semibold leading-snug text-slate-900 group-hover/title:text-blue-600">
+                <HighlightedText text={result.title} query={query} />
+              </h2>
+              <span className="text-slate-300 opacity-0 transition-opacity group-hover/title:opacity-100"><IconExternalLink /></span>
+            </a>
             <p className="mt-1 text-xs text-slate-400">
               {[result.key, result.channelName, result.project, result.space, result.team, result.author, result.date ? formatDate(result.date) : '']
                 .filter(Boolean)
@@ -294,7 +291,90 @@ function ResultPreview({
           </button>
         </div>
         <div className="overflow-y-auto px-5 py-5">
-          {(result.content || result.snippet) ? (
+          {isJira ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="min-w-0 space-y-7">
+                <section>
+                  <h3 className="mb-3 text-sm font-semibold text-slate-900">설명</h3>
+                  <a
+                    href={result.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-xl border border-transparent bg-slate-50 px-4 py-4 transition-colors hover:border-blue-200 hover:bg-blue-50/40"
+                  >
+                    {(result.content || result.snippet) ? (
+                      <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                        <HighlightedText text={result.content || result.snippet} query={query} />
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-400">등록된 설명이 없습니다.</p>
+                    )}
+                    <span className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-600">Jira에서 전체 내용 보기 <IconExternalLink /></span>
+                  </a>
+                </section>
+
+                <section>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900">활동 · 댓글</h3>
+                    <span className="text-xs text-slate-400">{result.commentsTotal ?? 0}개</span>
+                  </div>
+                  {result.comments && result.comments.length > 0 ? (
+                    <div className="space-y-4">
+                      {result.comments.map((comment) => (
+                        <article key={comment.id} className="flex gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">{comment.author.slice(0, 1)}</span>
+                          <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                            <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="text-xs font-semibold text-slate-800">{comment.author}</span>
+                              <span className="text-[11px] text-slate-400">{formatDate(comment.created)}</span>
+                            </div>
+                            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                              <HighlightedText text={comment.body} query={query} />
+                            </p>
+                          </div>
+                        </article>
+                      ))}
+                      {(result.commentsTotal ?? 0) > result.comments.length && (
+                        <a href={result.url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs font-medium text-blue-600 hover:underline">
+                          나머지 댓글은 Jira에서 보기
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">표시할 댓글이 없습니다.</p>
+                  )}
+                </section>
+              </div>
+
+              <aside className="h-fit rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900">세부 정보</h3>
+                <dl className="space-y-3 text-xs">
+                  {[
+                    ['상태', result.status],
+                    ['유형', result.issueType],
+                    ['프로젝트', result.project],
+                    ['담당자', result.author],
+                    ['보고자', result.reporter],
+                    ['우선순위', result.priority],
+                    ['업데이트', result.date ? formatDate(result.date) : ''],
+                  ].filter(([, value]) => value).map(([label, value]) => (
+                    <div key={label} className="grid grid-cols-[64px_minmax(0,1fr)] gap-2">
+                      <dt className="text-slate-400">{label}</dt>
+                      <dd className="break-words font-medium text-slate-700">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {result.labels && result.labels.length > 0 && (
+                  <div className="mt-4 border-t border-slate-200 pt-4">
+                    <p className="mb-2 text-xs text-slate-400">레이블</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {result.labels.map((label) => <span key={label} className="rounded bg-slate-200 px-2 py-1 text-[11px] text-slate-600">{label}</span>)}
+                    </div>
+                  </div>
+                )}
+              </aside>
+            </div>
+          ) : (result.content || result.snippet) ? (
             <p className="whitespace-pre-wrap text-sm leading-7 text-slate-600">
               <HighlightedText text={result.content || result.snippet} query={query} />
             </p>
@@ -650,14 +730,12 @@ interface DrawerProps {
 const DRAWER_TITLES: Record<NonNullable<DrawerType>, string> = {
   atlassian: 'Jira / Confluence 연결',
   google: 'Google Workspace 연결',
-  jsm: '고객사 JSM 연결',
   mattermost: 'Mattermost 연결',
 };
 
 const DRAWER_DESCS: Record<NonNullable<DrawerType>, string> = {
   atlassian: 'Jira 이슈, Confluence 페이지를 검색합니다.',
   google: 'Drive, Docs, Sheets, Slides 파일을 검색합니다.',
-  jsm: '고객사 JSM의 문의 내역을 검색합니다.',
   mattermost: '사내 메신저 채팅 대화를 검색합니다.',
 };
 
@@ -696,9 +774,9 @@ function Drawer({ open, type, atlassianAuth, google, mattermost, onClose }: Draw
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
-              {(type === 'atlassian' || type === 'jsm') && (
+              {type === 'atlassian' && (
                 <AtlassianDrawerContent
-                  kind={type === 'jsm' ? 'jsm' : 'workspace'}
+                  kind="workspace"
                   atlassianAuth={atlassianAuth}
                 />
               )}
@@ -740,9 +818,7 @@ interface ServiceGroup {
 
 interface SidebarProps {
   atlassianConnected: boolean;
-  jsmConnected: boolean;
   workspaceConnections: AtlassianConnection[];
-  jsmConnections: AtlassianConnection[];
   googleConnected: boolean;
   mattermostConnected: boolean;
   onServiceClick: (drawer: DrawerType) => void;
@@ -750,9 +826,7 @@ interface SidebarProps {
 
 function Sidebar({
   atlassianConnected,
-  jsmConnected,
   workspaceConnections,
-  jsmConnections,
   googleConnected,
   mattermostConnected,
   onServiceClick,
@@ -767,15 +841,6 @@ function Sidebar({
         desc: connection.resource.url,
       })),
       connected: atlassianConnected,
-    },
-    {
-      groupLabel: '고객 문의',
-      drawerType: 'jsm',
-      services: jsmConnections.map((connection) => ({
-        name: connection.label,
-        desc: `${connection.resource.name}${connection.projectKey ? ` · ${connection.projectKey}` : ''}`,
-      })),
-      connected: jsmConnected,
     },
     {
       groupLabel: 'Google Workspace',
@@ -819,9 +884,7 @@ function Sidebar({
             <div key={group.groupLabel} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
               <div className="flex items-center gap-2.5 border-b border-slate-100 px-3 py-2.5">
                 <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  group.drawerType === 'jsm'
-                    ? 'bg-amber-50 text-amber-600'
-                    : group.drawerType === 'google'
+                  group.drawerType === 'google'
                       ? 'bg-emerald-50 text-emerald-600'
                       : group.drawerType === 'mattermost'
                         ? 'bg-rose-50 text-rose-600'
@@ -973,9 +1036,8 @@ export default function SearchPage() {
     if (!q) return;
 
     const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
-    const jsmConnected = atlassianAuth.getConnections('jsm').length > 0;
     const mattermostConnected = mattermost.connected;
-    const hasAnyConnection = atlassianConnected || jsmConnected || google.connected || mattermostConnected;
+    const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
     if (!hasAnyConnection) {
       setErrors({ global: '검색할 서비스가 없습니다. 왼쪽에서 서비스를 연결해주세요.' });
       setHasSearched(true);
@@ -993,12 +1055,10 @@ export default function SearchPage() {
 
     try {
       const jiraSources = filters.sources.filter((s) => s === 'jira' || s === 'confluence');
-      const jsmSources = filters.sources.filter((s) => s === 'jsm');
       const driveSources = filters.sources.filter((s) => s === 'drive');
       const mmSources = filters.sources.filter((s) => s === 'mattermost');
       const activeSources = [
         ...(atlassianConnected ? jiraSources : []),
-        ...(jsmConnected ? jsmSources : []),
         ...(google.connected ? driveSources : []),
         ...(mattermostConnected ? mmSources : []),
       ];
@@ -1033,17 +1093,6 @@ export default function SearchPage() {
             'x-atlassian-oauth-token': connection.accessToken,
             'x-atlassian-cloud-id': connection.resource.id,
             'x-atlassian-site-url': connection.resource.url,
-          }) });
-        }
-      }
-      if (jsmSources.length > 0) {
-        for (const connection of atlassianAuth.getConnections('jsm')) {
-          serverRequests.push({ label: connection.label, request: requestSearch(['jsm'], {
-            'x-atlassian-oauth-token': connection.accessToken,
-            'x-atlassian-cloud-id': connection.resource.id,
-            'x-atlassian-site-url': connection.resource.url,
-            'x-jira-project-key': connection.projectKey ?? '',
-            'x-jira-jql-filter': encodeURIComponent(connection.jqlFilter ?? ''),
           }) });
         }
       }
@@ -1089,12 +1138,11 @@ export default function SearchPage() {
     if (e.key === 'Enter') handleSearch();
   };
 
-  const totalCount = counts.jira + counts.confluence + counts.jsm + counts.drive + counts.mattermost;
+  const totalCount = counts.jira + counts.confluence + counts.drive + counts.mattermost;
   const allResultSourceOptions: { value: 'all' | SearchSource; label: string; count: number }[] = [
     { value: 'all', label: '전체', count: totalCount },
     { value: 'jira', label: 'Jira', count: counts.jira },
     { value: 'confluence', label: 'Confluence', count: counts.confluence },
-    { value: 'jsm', label: '고객 문의', count: counts.jsm },
     { value: 'drive', label: 'Drive', count: counts.drive },
     { value: 'mattermost', label: 'Mattermost', count: counts.mattermost },
   ];
@@ -1106,13 +1154,11 @@ export default function SearchPage() {
     : results.filter((result) => result.source === resultSource);
 
   const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
-  const jsmConnected = atlassianAuth.getConnections('jsm').length > 0;
   const mattermostConnected = mattermost.connected;
-  const hasAnyConnection = atlassianConnected || jsmConnected || google.connected || mattermostConnected;
+  const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
   const filterOptions: { value: SearchSource; label: string; available: boolean }[] = [
     { value: 'jira', label: 'Jira', available: atlassianConnected },
     { value: 'confluence', label: 'Confluence', available: atlassianConnected },
-    { value: 'jsm', label: '고객 문의', available: jsmConnected },
     { value: 'drive', label: 'Google Drive', available: google.connected },
     { value: 'mattermost', label: 'Mattermost', available: mattermostConnected },
   ];
@@ -1150,7 +1196,6 @@ export default function SearchPage() {
               <p className="mb-2 text-xs font-medium text-gray-500">연결된 서비스</p>
               <div className="space-y-1 text-xs text-gray-600">
                 <p>문서·개발 Atlassian {atlassianAuth.getConnections('workspace').length}개</p>
-                <p>고객 문의 JSM {atlassianAuth.getConnections('jsm').length}개</p>
                 <p>Google Drive {google.connected ? '연결됨' : '미연결'}</p>
                 <p>Mattermost {mattermost.connected ? '연결됨' : '미연결'}</p>
               </div>
@@ -1176,9 +1221,7 @@ export default function SearchPage() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           atlassianConnected={atlassianConnected}
-          jsmConnected={jsmConnected}
           workspaceConnections={atlassianAuth.getConnections('workspace')}
-          jsmConnections={atlassianAuth.getConnections('jsm')}
           googleConnected={google.connected}
           mattermostConnected={mattermostConnected}
           onServiceClick={setActiveDrawer}
@@ -1322,7 +1365,6 @@ export default function SearchPage() {
                     {errors.global && <p className="text-xs text-amber-700">{errors.global}</p>}
                     {errors.jira && <p className="text-xs text-amber-700">Jira: {errors.jira}</p>}
                     {errors.confluence && <p className="text-xs text-amber-700">Confluence: {errors.confluence}</p>}
-                    {errors.jsm && <p className="text-xs text-amber-700">고객 문의: {errors.jsm}</p>}
                     {errors.drive && <p className="text-xs text-amber-700">Google Drive: {errors.drive}</p>}
                     {errors.mattermost && <p className="text-xs text-amber-700">Mattermost: {errors.mattermost}</p>}
                     {Object.entries(errors)

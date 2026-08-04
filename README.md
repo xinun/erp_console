@@ -1,12 +1,12 @@
 # 사내 통합검색 (ERP Console)
 
-Jira, Confluence, Jira Service Management(JSM), Google Workspace(Drive, Docs 등)의 데이터를 한 곳에서 통합하여 검색할 수 있는 사내 통합검색 시스템입니다.
+Jira, Confluence, Google Workspace(Drive, Docs 등)의 데이터를 한 곳에서 통합하여 검색할 수 있는 사내 통합검색 시스템입니다.
 
 ## 기능
-- **Atlassian 연동**: Jira 이슈, Confluence 페이지 및 JSM 고객 문의 통합 검색 (OAuth 2.0 지원)
+- **Atlassian 연동**: Jira 이슈와 Confluence 페이지 통합 검색 (OAuth 2.0 지원)
 - **Google Workspace 연동**: Google Drive, Docs, Sheets, Slides 파일 검색 (OAuth 2.0 지원)
 
-JSM 고객 문의는 Jira의 이슈 검색 API와 프로젝트/JQL 필터를 사용하므로 별도의 Jira Service Management API 권한은 필요하지 않습니다.
+Jira Service Management에서 생성된 고객 문의도 Jira 이슈이므로 별도 연결 없이 회사 Jira 검색 결과에 포함됩니다.
 
 ## 개발 서버 실행 방법
 

@@ -8,6 +8,15 @@ export interface SearchConfig {
 
 export type SearchSource = 'jira' | 'confluence' | 'jsm' | 'drive' | 'mattermost';
 
+export interface SearchComment {
+  id: string;
+  author: string;
+  avatarUrl?: string;
+  body: string;
+  created: string;
+  updated?: string;
+}
+
 export interface SearchResult {
   id: string;
   source: SearchSource;
@@ -22,6 +31,11 @@ export interface SearchResult {
   status?: string;
   issueType?: string;
   project?: string;
+  reporter?: string;
+  priority?: string;
+  labels?: string[];
+  comments?: SearchComment[];
+  commentsTotal?: number;
   // Confluence specific
   space?: string;
   pageType?: string;

@@ -8,7 +8,6 @@ ERP Console은 여러 사내 서비스의 검색 결과를 하나의 화면에 �
 
 - Jira 이슈
 - Confluence 페이지
-- Jira Service Management 고객 문의
 - Google Drive, Docs, Sheets, Slides
 - Mattermost 메시지
 
@@ -53,7 +52,7 @@ read:me
 offline_access
 ```
 
-JSM 고객 문의도 `/rest/api/3/search/jql`을 사용한다. 프로젝트 키 또는 사용자 지정 JQL로 범위를 제한하며 `read:servicedesk-request`는 요청하지 않는다.
+Jira Service Management에서 생성된 고객 문의는 별도 연결을 만들지 않고 회사 Jira의 `/rest/api/3/search/jql` 결과로 함께 검색한다.
 
 ### Google Workspace
 

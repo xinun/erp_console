@@ -395,7 +395,15 @@ async function searchMattermost(
   const matches = groups.flat();
   const userIds = [...new Set(matches.map(({ post }) => post.user_id).filter((id): id is string => !!id))];
   const channelIds = [...new Set(matches.map(({ post }) => post.channel_id).filter((id): id is string => !!id))];
-  const [usersResponse, channelsResponse] = await Promise.all([
+  const channelIdsByTeam = new Map<string, Set<string>>();
+  for (const { post, team } of matches) {
+    if (!post.channel_id) continue;
+    const ids = channelIdsByTeam.get(team.id) ?? new Set<string>();
+    ids.add(post.channel_id);
+    channelIdsByTeam.set(team.id, ids);
+  }
+
+  const [usersResponse, channelsByTeam] = await Promise.all([
     userIds.length > 0
       ? fetch(`${baseUrl}/api/v4/users/ids`, {
           method: 'POST',
@@ -404,19 +412,31 @@ async function searchMattermost(
           cache: 'no-store',
         })
       : null,
-    channelIds.length > 0
-      ? fetch(`${baseUrl}/api/v4/channels/ids`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(channelIds),
-          cache: 'no-store',
-        })
-      : null,
+    Promise.all([...channelIdsByTeam.entries()].map(async ([teamId, ids]) => {
+      const response = await fetch(`${baseUrl}/api/v4/teams/${encodeURIComponent(teamId)}/channels/ids`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify([...ids]),
+        cache: 'no-store',
+      });
+      return response.ok ? await response.json() as MattermostChannel[] : [];
+    })),
   ]);
   const users = usersResponse?.ok ? await usersResponse.json() as MattermostUser[] : [];
-  const channels = channelsResponse?.ok ? await channelsResponse.json() as MattermostChannel[] : [];
   const userById = new Map(users.map((user) => [user.id, user]));
-  const channelById = new Map(channels.map((channel) => [channel.id, channel]));
+  const channelById = new Map(channelsByTeam.flat().map((channel) => [channel.id, channel]));
+
+  const missingChannelIds = channelIds.filter((channelId) => !channelById.has(channelId));
+  const fallbackChannels = await Promise.all(missingChannelIds.map(async (channelId) => {
+    const response = await fetch(`${baseUrl}/api/v4/channels/${encodeURIComponent(channelId)}`, {
+      headers,
+      cache: 'no-store',
+    });
+    return response.ok ? await response.json() as MattermostChannel : null;
+  }));
+  for (const channel of fallbackChannels) {
+    if (channel) channelById.set(channel.id, channel);
+  }
 
   const matchedResults = matches.map(({ post, team }) => {
     const user = post.user_id ? userById.get(post.user_id) : undefined;

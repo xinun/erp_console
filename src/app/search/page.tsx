@@ -6,6 +6,7 @@ import type {
   SearchResponse,
   SearchFilters,
   SearchSource,
+  GoogleFileType,
   DateRange,
 } from '@/lib/types';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
@@ -1014,7 +1015,8 @@ export default function SearchPage() {
   const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
-    sources: ['jira', 'confluence'],
+    sources: ['jira', 'confluence', 'drive', 'mattermost'],
+    googleFileTypes: ['docs', 'sheets', 'slides', 'files'],
     dateRange: 'all',
   });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1029,6 +1031,14 @@ export default function SearchPage() {
       : [...filters.sources, source];
     if (next.length === 0) return;
     setFilters({ ...filters, sources: next });
+  };
+
+  const toggleGoogleFileType = (fileType: GoogleFileType) => {
+    const next = filters.googleFileTypes.includes(fileType)
+      ? filters.googleFileTypes.filter((item) => item !== fileType)
+      : [...filters.googleFileTypes, fileType];
+    if (next.length === 0) return;
+    setFilters({ ...filters, googleFileTypes: next });
   };
 
   const handleSearch = useCallback(async () => {
@@ -1073,6 +1083,7 @@ export default function SearchPage() {
         const response = await fetch(`/api/search?${new URLSearchParams({
           q,
           sources: sources.join(','),
+          googleFileTypes: filters.googleFileTypes.join(','),
           dateRange: filters.dateRange,
           exclude: excludedKeywords,
         })}`, { headers });
@@ -1161,6 +1172,12 @@ export default function SearchPage() {
     { value: 'confluence', label: 'Confluence', available: atlassianConnected },
     { value: 'drive', label: 'Google Drive', available: google.connected },
     { value: 'mattermost', label: 'Mattermost', available: mattermostConnected },
+  ];
+  const googleFileTypeOptions: { value: GoogleFileType; label: string }[] = [
+    { value: 'docs', label: 'Docs' },
+    { value: 'sheets', label: 'Sheets' },
+    { value: 'slides', label: 'Slides' },
+    { value: 'files', label: '일반 파일' },
   ];
   const dateOptions: { value: DateRange; label: string }[] = [
     { value: 'all', label: '전체 기간' },
@@ -1289,6 +1306,28 @@ export default function SearchPage() {
                   ))}
                 </select>
               </div>
+
+              {filters.sources.includes('drive') && (
+                <div className={`mt-2 flex flex-wrap items-center gap-2 pl-1 ${google.connected ? '' : 'pointer-events-none opacity-35'}`}>
+                  <span className="mr-1 text-[11px] font-semibold text-slate-400">Google 파일 유형</span>
+                  {googleFileTypeOptions.map(({ value, label }) => (
+                    <label key={value} className="cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.googleFileTypes.includes(value)}
+                        onChange={() => toggleGoogleFileType(value)}
+                        disabled={!google.connected}
+                        className="peer sr-only"
+                      />
+                      <span className="flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-slate-300 peer-checked:border-emerald-200 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500">
+                        {filters.googleFileTypes.includes(value) && <IconCheck />}
+                        {label}
+                      </span>
+                    </label>
+                  ))}
+                  <span className="text-[10px] text-slate-400">선택한 형식만 검색</span>
+                </div>
+              )}
 
               <div className="mt-2 flex items-center gap-2 rounded-xl bg-slate-50 px-3">
                 <span className="text-slate-400"><IconMinusCircle /></span>

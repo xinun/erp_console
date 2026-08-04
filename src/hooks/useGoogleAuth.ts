@@ -22,6 +22,7 @@ declare global {
       accounts?: {
         oauth2?: {
           initTokenClient: (config: object) => TokenClient;
+          revoke?: (accessToken: string, callback: () => void) => void;
         };
       };
     };
@@ -61,10 +62,10 @@ export function useGoogleAuth(): GoogleAuthState {
     tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: [
-        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.metadata.readonly',
         'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile',
       ].join(' '),
+      include_granted_scopes: false,
       callback: async (response: TokenResponse) => {
         if (response.access_token) {
           const expiry = Date.now() + (response.expires_in ?? 3600) * 1000;
@@ -131,6 +132,10 @@ export function useGoogleAuth(): GoogleAuthState {
   }, [clientId]);
 
   const disconnect = useCallback(() => {
+    const token = localStorage.getItem(GOOGLE_TOKEN_KEY);
+    if (token) {
+      window.google?.accounts?.oauth2?.revoke?.(token, () => undefined);
+    }
     localStorage.removeItem(GOOGLE_TOKEN_KEY);
     localStorage.removeItem(GOOGLE_EXPIRY_KEY);
     localStorage.removeItem(GOOGLE_EMAIL_KEY);

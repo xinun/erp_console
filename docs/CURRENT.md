@@ -10,6 +10,11 @@
 
 ## 최근 완료
 
+- 검색 범위의 Jira, Confluence, Google Drive, Mattermost를 초기값으로 모두 선택하도록 변경했다.
+- Google Drive 검색에서 Docs, Sheets, Slides, 일반 파일 유형을 각각 선택할 수 있도록 추가했다.
+- Google OAuth 권한을 파일 본문 읽기가 가능한 `drive.readonly`에서 메타데이터 검색 전용 `drive.metadata.readonly`로 축소하고, 새 access token에 이전 권한을 합치지 않도록 설정했다. 기존 연결 사용자는 연결 해제 후 다시 동의해야 한다.
+- Google 연결 해제 시 브라우저 저장값뿐 아니라 Google에 발급된 OAuth 권한도 함께 취소하도록 보완했다.
+
 - 회사 Jira와 Confluence가 서로 다른 계정을 사용하는 구조에 맞춰 Atlassian 연결을 제품별로 분리했다.
 - OAuth 완료 시 연결된 Atlassian 계정 이름과 이메일을 표시하도록 추가했다.
 - Jira 전용 연결에는 Jira 검색만, Confluence 전용 연결에는 Confluence 검색만 요청하도록 변경했다.

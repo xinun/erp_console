@@ -238,10 +238,27 @@ function getDriveFileType(mimeType: string): string {
 async function searchGoogleDrive(
   q: string,
   accessToken: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  googleFileTypes: string[]
 ): Promise<SearchResult[]> {
   const safeQ = q.replace(/'/g, "\\'");
-  const query = `fullText contains '${safeQ}' and trashed = false${getDriveDateFilter(dateRange)}`;
+  const mimeTypes = {
+    docs: 'application/vnd.google-apps.document',
+    sheets: 'application/vnd.google-apps.spreadsheet',
+    slides: 'application/vnd.google-apps.presentation',
+    folder: 'application/vnd.google-apps.folder',
+  } as const;
+  const selectedTypes = new Set(googleFileTypes);
+  const mimeClauses = [
+    ...(selectedTypes.has('docs') ? [`mimeType = '${mimeTypes.docs}'`] : []),
+    ...(selectedTypes.has('sheets') ? [`mimeType = '${mimeTypes.sheets}'`] : []),
+    ...(selectedTypes.has('slides') ? [`mimeType = '${mimeTypes.slides}'`] : []),
+    ...(selectedTypes.has('files') ? [
+      `(mimeType != '${mimeTypes.docs}' and mimeType != '${mimeTypes.sheets}' and mimeType != '${mimeTypes.slides}' and mimeType != '${mimeTypes.folder}')`,
+    ] : []),
+  ];
+  const mimeFilter = mimeClauses.length > 0 ? ` and (${mimeClauses.join(' or ')})` : '';
+  const query = `fullText contains '${safeQ}' and trashed = false${mimeFilter}${getDriveDateFilter(dateRange)}`;
 
   const params = new URLSearchParams({
     q: query,
@@ -414,6 +431,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const q = searchParams.get('q')?.trim();
   const sourcesParam = searchParams.get('sources');
+  const googleFileTypes = (searchParams.get('googleFileTypes') ?? 'docs,sheets,slides,files')
+    .split(',')
+    .filter((type) => ['docs', 'sheets', 'slides', 'files'].includes(type));
   const dateRange = (searchParams.get('dateRange') as DateRange) ?? 'all';
   const excludedKeywords = (searchParams.get('exclude') ?? '')
     .split(/[\n,]+/)
@@ -500,7 +520,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('drive') && googleToken) {
     tasks.push(
-      searchGoogleDrive(q, googleToken, dateRange)
+      searchGoogleDrive(q, googleToken, dateRange, googleFileTypes)
         .then((r) => { allResults.push(...r); counts.drive = r.length; })
         .catch((e: Error) => { errors.drive = e.message; })
     );

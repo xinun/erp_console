@@ -8,6 +8,8 @@ export interface SearchConfig {
 
 export type SearchSource = 'jira' | 'confluence' | 'jsm' | 'drive' | 'mattermost';
 
+export type GoogleFileType = 'docs' | 'sheets' | 'slides' | 'files';
+
 export interface SearchComment {
   id: string;
   author: string;
@@ -65,5 +67,6 @@ export type DateRange = 'all' | '1w' | '1m' | '3m';
 
 export interface SearchFilters {
   sources: SearchSource[];
+  googleFileTypes: GoogleFileType[];
   dateRange: DateRange;
 }

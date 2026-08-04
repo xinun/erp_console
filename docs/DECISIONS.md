@@ -49,6 +49,22 @@ Atlassian OAuth의 `redirect_uri`는 브라우저의 현재 origin과 `/api/auth
 
 ## 새 결정 작성 형식
 
+## 2026-08-04: Jira와 Confluence 계정 연결 분리
+
+### 결정
+
+회사 Jira와 Confluence가 서로 다른 Atlassian 계정을 사용하므로 OAuth 연결을 제품별로 분리한다. 각 연결에 `jira` 또는 `confluence` 역할과 로그인한 사용자 정보를 저장하고 해당 제품 API만 호출한다.
+
+### 이유
+
+서로 다른 사용자에게 발급된 OAuth 토큰은 합칠 수 없다. 제품별 연결을 명확히 표시하면 잘못된 계정 선택을 확인할 수 있고, 권한이 없는 제품 API를 호출해 발생하는 불필요한 오류를 막을 수 있다.
+
+### 결과
+
+- 최초에는 Jira와 Confluence 로그인이 각각 한 번 필요하다.
+- 이후에는 각 refresh token으로 자동 갱신한다.
+- 사이트 URL은 공개 환경변수로 관리한다.
+
 ```md
 ## YYYY-MM-DD: 결정 제목
 

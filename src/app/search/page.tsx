@@ -9,7 +9,7 @@ import type {
   DateRange,
 } from '@/lib/types';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
-import { useAtlassianAuth, type AtlassianConnection } from '@/hooks/useAtlassianAuth';
+import { useAtlassianAuth, type AtlassianConnection, type AtlassianProduct } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -333,9 +333,9 @@ interface AtlassianDrawerProps {
 
 function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
   const isJsm = kind === 'jsm';
-  const [label, setLabel] = useState(isJsm ? '고객사 문의' : 'Mantech 문서·개발');
+  const [label, setLabel] = useState(isJsm ? '고객사 문의' : 'Atlassian 연결');
   const [siteUrl, setSiteUrl] = useState(
-    isJsm ? 'https://mantech-accordion.atlassian.net' : 'https://mantech.jira.com'
+    isJsm ? process.env.NEXT_PUBLIC_ATLASSIAN_JIRA_SITE_URL ?? '' : ''
   );
   const [projectKey, setProjectKey] = useState(isJsm ? 'LYUX' : '');
   const [jqlFilter, setJqlFilter] = useState(isJsm ? 'project = LYUX' : '');
@@ -343,7 +343,36 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
   const connections = atlassianAuth.connections.filter((connection) => connection.kind === kind);
 
   const handleConnect = () => {
-    setError(atlassianAuth.connect({ label, kind, siteUrl, projectKey, jqlFilter }) ?? '');
+    setError(atlassianAuth.connect({ label, kind, siteUrl, projectKey, jqlFilter, products: ['jira'] }) ?? '');
+  };
+
+  const presets: Array<{
+    product: AtlassianProduct;
+    label: string;
+    siteUrl: string;
+    accountHint: string;
+  }> = [
+    {
+      product: 'jira',
+      label: '회사 Jira',
+      siteUrl: process.env.NEXT_PUBLIC_ATLASSIAN_JIRA_SITE_URL ?? '',
+      accountHint: '회사 Atlassian 계정으로 로그인하세요.',
+    },
+    {
+      product: 'confluence',
+      label: 'Confluence',
+      siteUrl: process.env.NEXT_PUBLIC_ATLASSIAN_CONFLUENCE_SITE_URL ?? '',
+      accountHint: 'Confluence를 사용하는 Atlassian 계정으로 로그인하세요.',
+    },
+  ];
+
+  const connectPreset = (preset: typeof presets[number]) => {
+    setError(atlassianAuth.connect({
+      label: preset.label,
+      kind: 'workspace',
+      siteUrl: preset.siteUrl,
+      products: [preset.product],
+    }) ?? '');
   };
 
   return (
@@ -356,11 +385,43 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-gray-800">{connection.label}</p>
             <p className="truncate text-xs text-gray-500">{connection.resource.url}{connection.projectKey ? ` · ${connection.projectKey}` : ''}</p>
+            {connection.user && (
+              <p className="truncate text-xs text-blue-700">{connection.user.name}{connection.user.email ? ` · ${connection.user.email}` : ''}</p>
+            )}
           </div>
           <button onClick={() => atlassianAuth.disconnect(connection.id)} className="text-xs text-gray-500 hover:text-red-600">삭제</button>
         </div>
       ))}
-      <div className="space-y-3 border-t border-gray-100 pt-4">
+      {!isJsm && <div className="space-y-3 border-t border-gray-100 pt-4">
+        <p className="text-xs leading-5 text-slate-500">두 서비스는 사용하는 계정이 다릅니다. 각 카드에서 안내된 계정을 선택하면 이후에는 자동으로 갱신됩니다.</p>
+        {presets.map((preset) => {
+          const connected = connections.some((connection) => connection.products?.includes(preset.product));
+          return (
+            <div key={preset.product} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">{preset.label}</p>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">{preset.siteUrl || '사이트 URL 환경변수 설정 필요'}</p>
+                  <p className="mt-2 text-xs text-slate-600">{preset.accountHint}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                  {connected ? '연결됨' : '미연결'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => connectPreset(preset)}
+                disabled={atlassianAuth.loading || !preset.siteUrl}
+                className="mt-3 h-9 w-full rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {connected ? '다른 계정으로 다시 연결' : `${preset.label} 계정 연결`}
+              </button>
+            </div>
+          );
+        })}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>}
+      {isJsm && <div className="space-y-3 border-t border-gray-100 pt-4">
         <div>
           <label className="mb-1 block text-xs text-gray-500">연결 이름</label>
           <input value={label} onChange={(event) => setLabel(event.target.value)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm" />
@@ -392,7 +453,7 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
         >
           {atlassianAuth.loading ? '연결 중...' : isJsm ? '고객 문의 계정 연결' : '문서·개발 계정 연결'}
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -945,7 +1006,12 @@ export default function SearchPage() {
       const serverRequests: Array<{ label: string; request: Promise<SearchResponse> }> = [];
       if (jiraSources.length > 0) {
         for (const connection of atlassianAuth.getConnections('workspace')) {
-          serverRequests.push({ label: connection.label, request: requestSearch(jiraSources, {
+          const legacyConnection = !connection.products?.length;
+          const connectionSources = jiraSources.filter((source) =>
+            legacyConnection || connection.products?.includes(source === 'confluence' ? 'confluence' : 'jira')
+          );
+          if (connectionSources.length === 0) continue;
+          serverRequests.push({ label: connection.label, request: requestSearch(connectionSources, {
             'x-atlassian-oauth-token': connection.accessToken,
             'x-atlassian-cloud-id': connection.resource.id,
             'x-atlassian-site-url': connection.resource.url,

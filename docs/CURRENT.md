@@ -1,6 +1,6 @@
 # 현재 작업 상태
 
-마지막 갱신: 2026-07-27
+마지막 갱신: 2026-08-04
 
 ## 현재 기준
 
@@ -9,6 +9,11 @@
 - 운영 주소: `https://erp-console.vercel.app/search`
 
 ## 최근 완료
+
+- 회사 Jira와 Confluence가 서로 다른 계정을 사용하는 구조에 맞춰 Atlassian 연결을 제품별로 분리했다.
+- OAuth 완료 시 연결된 Atlassian 계정 이름과 이메일을 표시하도록 추가했다.
+- Jira 전용 연결에는 Jira 검색만, Confluence 전용 연결에는 Confluence 검색만 요청하도록 변경했다.
+- `NEXT_PUBLIC_ATLASSIAN_JIRA_SITE_URL`, `NEXT_PUBLIC_ATLASSIAN_CONFLUENCE_SITE_URL` 환경변수를 추가했다.
 
 - 검색 결과 요약을 검색어 주변 문맥으로 생성하고 검색어를 강조 표시하도록 개선했다.
 - 결과 클릭 시 ERP Console 내부 미리보기를 먼저 열고 사용자가 선택할 때만 원문을 새 탭으로 열도록 변경했다.

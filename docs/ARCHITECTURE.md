@@ -79,6 +79,8 @@ JSM 고객 문의도 `/rest/api/3/search/jql`을 사용한다. 프로젝트 키 
 ```env
 NEXT_PUBLIC_ATLASSIAN_CLIENT_ID=
 ATLASSIAN_CLIENT_SECRET=
+NEXT_PUBLIC_ATLASSIAN_JIRA_SITE_URL=
+NEXT_PUBLIC_ATLASSIAN_CONFLUENCE_SITE_URL=
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=
 MATTERMOST_BASE_URL=
 MATTERMOST_CLIENT_ID=
@@ -86,6 +88,8 @@ MATTERMOST_CLIENT_SECRET=
 NEXT_PUBLIC_MATTERMOST_URL=
 NEXT_PUBLIC_MATTERMOST_CLIENT_ID=
 ```
+
+Atlassian workspace 연결은 `products` 값으로 Jira 또는 Confluence 역할을 구분한다. 서로 다른 계정으로 연결할 수 있으며 검색 시 해당 제품의 API만 호출한다. OAuth 완료 시 User identity API의 계정 이름과 이메일을 연결 정보에 함께 저장한다.
 
 실제 값은 `.env.local` 또는 배포 환경의 비밀 설정에 저장한다. 저장소에는 커밋하지 않는다.
 

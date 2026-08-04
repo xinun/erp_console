@@ -85,6 +85,16 @@ export async function GET(request: NextRequest) {
       return sendHtmlResponse({ type: 'ATLASSIAN_AUTH_ERROR', error: 'No accessible resources found' });
     }
 
+    const profileResponse = await fetch('https://api.atlassian.com/me', {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: 'application/json',
+      },
+    });
+    const profile = profileResponse.ok
+      ? await profileResponse.json() as Record<string, unknown>
+      : null;
+
     // 3. 부모 창으로 데이터 전달
     return sendHtmlResponse({
       type: 'ATLASSIAN_AUTH_SUCCESS',
@@ -93,6 +103,12 @@ export async function GET(request: NextRequest) {
         refresh_token,
         expires_at: Date.now() + expires_in * 1000,
         state,
+        user: profile ? {
+          accountId: String(profile.account_id ?? ''),
+          name: String(profile.name ?? ''),
+          email: profile.email ? String(profile.email) : undefined,
+          picture: profile.picture ? String(profile.picture) : undefined,
+        } : undefined,
         resources: resources.map((resource: unknown) => {
           const item = resource as Record<string, unknown>;
           return {

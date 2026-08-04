@@ -7,6 +7,14 @@ const PENDING_KEY = 'mantech_atlassian_pending_connection';
 const STATE_KEY = 'mantech_atlassian_oauth_state';
 
 export type AtlassianConnectionKind = 'workspace' | 'jsm';
+export type AtlassianProduct = 'jira' | 'confluence';
+
+export interface AtlassianUser {
+  accountId: string;
+  name: string;
+  email?: string;
+  picture?: string;
+}
 
 export interface AtlassianResource {
   id: string;
@@ -25,6 +33,8 @@ export interface AtlassianConnection {
   refreshToken?: string;
   expiresAt: number;
   jqlFilter?: string;
+  products?: AtlassianProduct[];
+  user?: AtlassianUser;
 }
 
 export interface NewAtlassianConnection {
@@ -33,6 +43,7 @@ export interface NewAtlassianConnection {
   siteUrl: string;
   projectKey?: string;
   jqlFilter?: string;
+  products?: AtlassianProduct[];
 }
 
 function readConnections(): AtlassianConnection[] {
@@ -132,7 +143,7 @@ export function useAtlassianAuth() {
     if (data?.type === 'ATLASSIAN_AUTH_SUCCESS') {
       const expectedState = sessionStorage.getItem(STATE_KEY);
       const pendingRaw = sessionStorage.getItem(PENDING_KEY);
-      const { access_token, refresh_token, expires_at, resources, state } = data.payload;
+      const { access_token, refresh_token, expires_at, resources, state, user } = data.payload;
       if (!expectedState || state !== expectedState || !pendingRaw) {
         setLoading(false);
         alert('Atlassian 연결 오류: 인증 상태를 확인할 수 없습니다.');
@@ -163,11 +174,14 @@ export function useAtlassianAuth() {
         accessToken: access_token,
         refreshToken: refresh_token,
         expiresAt: expires_at,
+        products: pending.products,
+        user,
       };
       const existing = readConnections();
       const duplicateIndex = existing.findIndex((connection) =>
         connection.kind === nextConnection.kind &&
         connection.resource.id === nextConnection.resource.id &&
+        JSON.stringify(connection.products ?? []) === JSON.stringify(nextConnection.products ?? []) &&
         (connection.projectKey ?? '') === (nextConnection.projectKey ?? '')
       );
       const next = duplicateIndex >= 0

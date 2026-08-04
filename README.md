@@ -39,7 +39,11 @@ npm run dev
 ```env
 NEXT_PUBLIC_ATLASSIAN_CLIENT_ID=여기에_발급받은_Client_ID_입력
 ATLASSIAN_CLIENT_SECRET=여기에_발급받은_Client_Secret_입력
+NEXT_PUBLIC_ATLASSIAN_JIRA_SITE_URL=https://회사-jira.atlassian.net
+NEXT_PUBLIC_ATLASSIAN_CONFLUENCE_SITE_URL=https://회사-confluence.atlassian.net
 ```
+
+Jira와 Confluence가 서로 다른 Atlassian 계정을 사용하면 각각 한 번씩 연결합니다. ERP Console은 연결마다 제품 역할과 로그인한 계정 정보를 저장하고, Jira 연결에는 Jira 검색만, Confluence 연결에는 Confluence 검색만 요청합니다. 이후 access token이 만료되기 전에 refresh token으로 각 연결을 자동 갱신합니다.
 
 **중요**: `.env.local` 파일이 수정된 경우 반드시 터미널에서 `npm run dev` 서버를 종료(Ctrl+C)하고 다시 실행해야 변경된 환경 변수가 적용됩니다.
 

@@ -37,6 +37,9 @@ export interface SearchResult {
   url: string;
   author: string;
   date: string;
+  matchType?: 'title' | 'content';
+  relevanceScore?: number;
+  resultKind?: 'content' | 'attachment';
   // Jira specific
   key?: string;
   status?: string;
@@ -53,6 +56,8 @@ export interface SearchResult {
   // Drive specific
   fileType?: string;
   mimeType?: string;
+  fileSize?: number;
+  extension?: string;
   // Mattermost specific
   team?: string;
   channelName?: string;

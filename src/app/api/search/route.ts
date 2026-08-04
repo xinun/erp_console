@@ -54,6 +54,35 @@ function getContextSnippet(text: string, query: string): string {
   return `${start > 0 ? '…' : ''}${normalizedText.slice(start, end)}${end < normalizedText.length ? '…' : ''}`;
 }
 
+function calculateRelevance(result: SearchResult, query: string): number {
+  const normalizedQuery = query.toLocaleLowerCase().trim();
+  const terms = normalizedQuery
+    .split(/\s+/)
+    .map((term) => term.replace(/["*]/g, ''))
+    .filter((term) => term.length > 0 && !term.includes(':'));
+  const title = result.title.toLocaleLowerCase();
+  const body = [result.snippet, result.content, result.author, result.project, result.space, result.channelName]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase();
+
+  let score = 0;
+  if (title === normalizedQuery) score += 120;
+  else if (title.includes(normalizedQuery)) score += 80;
+  for (const term of terms) {
+    if (title.includes(term)) score += 24;
+    if (body.includes(term)) score += 8;
+  }
+  if (result.matchType === 'title') score += 40;
+  if (result.matchType === 'content') score += 15;
+
+  const age = Date.now() - new Date(result.date).getTime();
+  if (Number.isFinite(age) && age >= 0) {
+    score += Math.max(0, 12 - Math.floor(age / (30 * 24 * 60 * 60 * 1000)));
+  }
+  return score;
+}
+
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function getJiraDateFilter(dateRange: DateRange): string {
@@ -259,7 +288,9 @@ async function searchGoogleDrive(
     ] : []),
   ];
   const mimeFilter = mimeClauses.length > 0 ? ` and (${mimeClauses.join(' or ')})` : '';
-  const query = `fullText contains '${safeQ}' and trashed = false${mimeFilter}${getDriveDateFilter(dateRange)}`;
+  const baseFilter = `trashed = false${mimeFilter}${getDriveDateFilter(dateRange)}`;
+  const fullTextQuery = `fullText contains '${safeQ}' and ${baseFilter}`;
+  const titleQuery = `name contains '${safeQ}' and ${baseFilter}`;
 
   const areaConfigs = [
     ...(googleSearchAreas.includes('user') ? [{ area: 'user', corpora: 'user' }] : []),
@@ -267,9 +298,9 @@ async function searchGoogleDrive(
     ...(googleSearchAreas.includes('domain') ? [{ area: 'domain', corpora: 'domain' }] : []),
   ];
 
-  const areaFiles = await Promise.all(areaConfigs.map(async ({ area, corpora }) => {
+  const searchArea = async (area: string, corpora: string, driveQuery: string) => {
     const params = new URLSearchParams({
-      q: query,
+      q: driveQuery,
       fields: 'files(id,name,mimeType,webViewLink,modifiedTime,owners,driveId)',
       pageSize: '100',
       orderBy: 'modifiedTime desc',
@@ -292,10 +323,16 @@ async function searchGoogleDrive(
     const data = await response.json();
     const files = (data.files ?? []) as Array<Record<string, unknown>>;
     return area === 'sharedDrives' ? files.filter((file) => Boolean(file.driveId)) : files;
-  }));
+  };
+
+  const [fullTextAreaFiles, titleAreaFiles] = await Promise.all([
+    Promise.all(areaConfigs.map(({ area, corpora }) => searchArea(area, corpora, fullTextQuery))),
+    Promise.all(areaConfigs.map(({ area, corpora }) => searchArea(area, corpora, titleQuery))),
+  ]);
+  const titleMatchIds = new Set(titleAreaFiles.flat().map((file) => file.id as string));
 
   const uniqueFiles = Array.from(
-    new Map(areaFiles.flat().map((file) => [file.id as string, file])).values()
+    new Map(fullTextAreaFiles.flat().map((file) => [file.id as string, file])).values()
   ).sort((a, b) => new Date((b.modifiedTime as string) ?? 0).getTime() - new Date((a.modifiedTime as string) ?? 0).getTime());
 
   return uniqueFiles.map((file) => {
@@ -313,6 +350,7 @@ async function searchGoogleDrive(
       date: (file.modifiedTime as string) ?? '',
       fileType,
       mimeType,
+      matchType: titleMatchIds.has(file.id as string) ? 'title' as const : 'content' as const,
     };
   });
 }
@@ -349,6 +387,29 @@ interface MattermostChannel {
   type?: string;
 }
 
+interface MattermostChannelMember {
+  user_id: string;
+}
+
+interface MattermostFileInfo {
+  id: string;
+  user_id?: string;
+  post_id?: string;
+  channel_id?: string;
+  create_at?: number;
+  name?: string;
+  extension?: string;
+  size?: number;
+  mime_type?: string;
+}
+
+function expandShortMattermostTerms(query: string): string {
+  return query
+    .split(/\s+/)
+    .map((term) => /^[가-힣]{1,2}$/.test(term) ? `${term}*` : term)
+    .join(' ');
+}
+
 async function searchMattermost(
   q: string,
   accessToken: string,
@@ -361,45 +422,78 @@ async function searchMattermost(
     Authorization: `Bearer ${accessToken}`,
     Accept: 'application/json',
   };
-  const teamsResponse = await fetch(`${baseUrl}/api/v4/users/me/teams`, {
-    headers,
-    cache: 'no-store',
-  });
+  const searchTerms = expandShortMattermostTerms(q);
+  const [teamsResponse, currentUserResponse] = await Promise.all([
+    fetch(`${baseUrl}/api/v4/users/me/teams`, { headers, cache: 'no-store' }),
+    fetch(`${baseUrl}/api/v4/users/me`, { headers, cache: 'no-store' }),
+  ]);
 
   if (!teamsResponse.ok) {
     throw new Error(`Mattermost 팀 조회 오류 (${teamsResponse.status})`);
   }
 
   const teams = await teamsResponse.json() as MattermostTeam[];
-  const groups = await Promise.all(teams.map(async (team) => {
-    const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/posts/search`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ terms: q, is_or_search: false }),
-      cache: 'no-store',
-    });
-    if (!response.ok) return [];
+  const currentUser = currentUserResponse.ok ? await currentUserResponse.json() as MattermostUser : null;
+  const [groups, fileGroups] = await Promise.all([
+    Promise.all(teams.map(async (team) => {
+      const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/posts/search`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terms: searchTerms, is_or_search: false }),
+        cache: 'no-store',
+      });
+      if (!response.ok) return [];
 
-    const data = await response.json() as {
-      order?: string[];
-      posts?: Record<string, MattermostPost>;
-    };
+      const data = await response.json() as {
+        order?: string[];
+        posts?: Record<string, MattermostPost>;
+      };
 
-    return (data.order ?? []).flatMap((postId) => {
-      const post = data.posts?.[postId];
-      if (!post) return [];
-      return [{ post, team }];
-    });
-  }));
+      return (data.order ?? []).flatMap((postId) => {
+        const post = data.posts?.[postId];
+        if (!post) return [];
+        return [{ post, team }];
+      });
+    })),
+    Promise.all(teams.map(async (team) => {
+      const formData = new FormData();
+      formData.set('terms', searchTerms);
+      formData.set('is_or_search', 'false');
+      formData.set('include_deleted_channels', 'true');
+      formData.set('per_page', '100');
+      const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/files/search`, {
+        method: 'POST',
+        headers,
+        body: formData,
+        cache: 'no-store',
+      });
+      if (!response.ok) return [];
+      const data = await response.json() as { file_infos?: MattermostFileInfo[] };
+      return (data.file_infos ?? []).map((file) => ({ file, team }));
+    })),
+  ]);
 
   const matches = groups.flat();
-  const userIds = [...new Set(matches.map(({ post }) => post.user_id).filter((id): id is string => !!id))];
-  const channelIds = [...new Set(matches.map(({ post }) => post.channel_id).filter((id): id is string => !!id))];
+  const fileMatches = fileGroups.flat();
+  const userIds = [...new Set([
+    ...matches.map(({ post }) => post.user_id),
+    ...fileMatches.map(({ file }) => file.user_id),
+  ].filter((id): id is string => !!id))];
+  const channelIds = [...new Set([
+    ...matches.map(({ post }) => post.channel_id),
+    ...fileMatches.map(({ file }) => file.channel_id),
+  ].filter((id): id is string => !!id))];
   const channelIdsByTeam = new Map<string, Set<string>>();
   for (const { post, team } of matches) {
     if (!post.channel_id) continue;
     const ids = channelIdsByTeam.get(team.id) ?? new Set<string>();
     ids.add(post.channel_id);
+    channelIdsByTeam.set(team.id, ids);
+  }
+  for (const { file, team } of fileMatches) {
+    if (!file.channel_id) continue;
+    const ids = channelIdsByTeam.get(team.id) ?? new Set<string>();
+    ids.add(file.channel_id);
     channelIdsByTeam.set(team.id, ids);
   }
 
@@ -438,13 +532,60 @@ async function searchMattermost(
     if (channel) channelById.set(channel.id, channel);
   }
 
+  const conversationChannels = [...channelById.values()].filter((channel) => channel.type === 'D' || channel.type === 'G');
+  const conversationMembers = new Map<string, string[]>();
+  const memberGroups = await Promise.all(conversationChannels.map(async (channel) => {
+    const response = await fetch(`${baseUrl}/api/v4/channels/${encodeURIComponent(channel.id)}/members?page=0&per_page=100`, {
+      headers,
+      cache: 'no-store',
+    });
+    if (response.ok) {
+      const members = await response.json() as MattermostChannelMember[];
+      return [channel.id, members.map((member) => member.user_id)] as const;
+    }
+    const parsedIds = channel.type === 'D' ? (channel.name ?? '').split('__').filter(Boolean) : [];
+    return [channel.id, parsedIds] as const;
+  }));
+  for (const [channelId, memberIds] of memberGroups) conversationMembers.set(channelId, memberIds);
+
+  const missingMemberIds = [...new Set(memberGroups.flatMap(([, memberIds]) => memberIds))]
+    .filter((userId) => !userById.has(userId));
+  if (missingMemberIds.length > 0) {
+    const response = await fetch(`${baseUrl}/api/v4/users/ids`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(missingMemberIds),
+      cache: 'no-store',
+    });
+    if (response.ok) {
+      const memberUsers = await response.json() as MattermostUser[];
+      for (const user of memberUsers) userById.set(user.id, user);
+    }
+  }
+
+  const getUserName = (user?: MattermostUser) => {
+    const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
+    return fullName || user?.nickname || user?.username || '';
+  };
+  const getChannelName = (channel?: MattermostChannel) => {
+    if (!channel) return '알 수 없는 채널';
+    if (channel.type === 'D' || channel.type === 'G') {
+      const names = (conversationMembers.get(channel.id) ?? [])
+        .filter((userId) => userId !== currentUser?.id)
+        .map((userId) => getUserName(userById.get(userId)))
+        .filter(Boolean);
+      if (channel.type === 'D') return names[0] ? `${names[0]}님과의 대화` : '개인 메시지';
+      if (names.length === 0) return '그룹 메시지';
+      return `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` 외 ${names.length - 2}명` : ''} 그룹 대화`;
+    }
+    return channel.display_name || channel.name || '알 수 없는 채널';
+  };
+
   const matchedResults = matches.map(({ post, team }) => {
     const user = post.user_id ? userById.get(post.user_id) : undefined;
     const channel = post.channel_id ? channelById.get(post.channel_id) : undefined;
-    const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
-    const author = fullName || user?.nickname || user?.username || '알 수 없는 사용자';
-    const channelName = channel?.display_name || channel?.name ||
-      (channel?.type === 'D' ? '다이렉트 메시지' : '알 수 없는 채널');
+    const author = getUserName(user) || '알 수 없는 사용자';
+    const channelName = getChannelName(channel);
     const result: SearchResult = {
       id: post.id,
       source: 'mattermost',
@@ -472,7 +613,7 @@ async function searchMattermost(
     groupedResults.set(item.groupKey, group);
   }
 
-  const results: SearchResult[] = Array.from(groupedResults.values()).map((group) => {
+  const messageResults: SearchResult[] = Array.from(groupedResults.values()).map((group) => {
     const ordered = [...group].sort(
       (a, b) => new Date(a.result.date).getTime() - new Date(b.result.date).getTime()
     );
@@ -496,6 +637,31 @@ async function searchMattermost(
       content: isThread ? ordered.map(({ result }) => result.content || result.snippet).join('\n\n') : first.result.content,
     };
   });
+
+  const fileResults: SearchResult[] = fileMatches.map(({ file, team }) => {
+    const user = file.user_id ? userById.get(file.user_id) : undefined;
+    const channel = file.channel_id ? channelById.get(file.channel_id) : undefined;
+    const author = getUserName(user) || '알 수 없는 사용자';
+    const channelName = getChannelName(channel);
+    return {
+      id: `file-${file.id}`,
+      source: 'mattermost',
+      resultKind: 'attachment',
+      title: file.name || 'Mattermost 첨부파일',
+      snippet: `${file.extension?.toUpperCase() || file.mime_type || '파일'} · ${channelName}`,
+      url: file.post_id ? `${baseUrl}/${team.name}/pl/${file.post_id}` : `${baseUrl}/${team.name}`,
+      author,
+      date: new Date(file.create_at ?? 0).toISOString(),
+      team: team.display_name,
+      channelName,
+      fileType: file.extension?.toUpperCase() || '파일',
+      mimeType: file.mime_type,
+      fileSize: file.size,
+      extension: file.extension,
+    };
+  });
+
+  const results = [...messageResults, ...fileResults];
 
   const days = dateRange === '1w' ? 7 : dateRange === '1m' ? 30 : dateRange === '3m' ? 90 : null;
   const cutoff = days ? Date.now() - days * 24 * 60 * 60 * 1000 : null;
@@ -631,10 +797,13 @@ export async function GET(request: NextRequest) {
         ].filter(Boolean).join(' ').toLocaleLowerCase();
         return !excludedKeywords.some((keyword) => searchableText.includes(keyword));
       });
-  const results = filteredResults.map((result) => ({
-    ...result,
-    snippet: getContextSnippet(result.snippet, q),
-  }));
+  const results = filteredResults
+    .map((result) => ({
+      ...result,
+      snippet: getContextSnippet(result.snippet, q),
+      relevanceScore: calculateRelevance(result, q),
+    }))
+    .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
   const filteredCounts = {
     jira: results.filter((result) => result.source === 'jira').length,
     confluence: results.filter((result) => result.source === 'confluence').length,

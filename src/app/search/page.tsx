@@ -27,6 +27,13 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function formatFileSize(size?: number): string {
+  if (!size || size < 1) return '';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 function IconSearch({ size = 16, className }: { size?: number; className?: string }) {
@@ -128,6 +135,14 @@ function IconGridLayout() {
   );
 }
 
+function IconArrowUp() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="m6 15 6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function IconService({ type }: { type: NonNullable<DrawerType> }) {
   const iconClass = 'h-4 w-4';
   if (type === 'google') {
@@ -193,6 +208,120 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   );
 }
 
+function ResultScrollTools({
+  scrollContainer,
+  results,
+}: {
+  scrollContainer: React.RefObject<HTMLElement | null>;
+  results: SearchResult[];
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [progress, setProgress] = useState(0);
+  const [showTopButton, setShowTopButton] = useState(false);
+
+  useEffect(() => {
+    const element = scrollContainer.current;
+    if (!element) return;
+    const update = () => {
+      const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+      setProgress(maxScroll > 0 ? element.scrollTop / maxScroll : 0);
+      setShowTopButton(element.scrollTop > 320);
+    };
+    update();
+    element.addEventListener('scroll', update, { passive: true });
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(element);
+    return () => {
+      element.removeEventListener('scroll', update);
+      resizeObserver.disconnect();
+    };
+  }, [scrollContainer, results.length]);
+
+  const scrubTo = (clientY: number) => {
+    const element = scrollContainer.current;
+    const track = trackRef.current;
+    if (!element || !track) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+    element.scrollTo({ top: ratio * Math.max(0, element.scrollHeight - element.clientHeight) });
+  };
+
+  const sampledResults = results.filter((_, index) => {
+    const interval = Math.max(1, Math.ceil(results.length / 100));
+    return index % interval === 0;
+  });
+  const sourceColor: Record<SearchSource, string> = {
+    jira: 'bg-blue-500',
+    confluence: 'bg-cyan-500',
+    jsm: 'bg-indigo-500',
+    drive: 'bg-emerald-500',
+    mattermost: 'bg-rose-500',
+  };
+
+  return (
+    <>
+      {results.length > 5 && (
+        <div className="fixed right-5 top-1/2 z-20 hidden -translate-y-1/2 xl:block">
+          <div className="rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-lg backdrop-blur" title="클릭하거나 드래그해 결과 위치 이동">
+            <div
+              ref={trackRef}
+              role="slider"
+              tabIndex={0}
+              aria-label="검색 결과 위치"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress * 100)}
+              onPointerDown={(event) => {
+                draggingRef.current = true;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                scrubTo(event.clientY);
+              }}
+              onPointerMove={(event) => {
+                if (draggingRef.current) scrubTo(event.clientY);
+              }}
+              onPointerUp={(event) => {
+                draggingRef.current = false;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+              onPointerCancel={() => { draggingRef.current = false; }}
+              onKeyDown={(event) => {
+                const element = scrollContainer.current;
+                if (!element) return;
+                const step = element.clientHeight * 0.75;
+                if (event.key === 'ArrowUp') element.scrollBy({ top: -step, behavior: 'smooth' });
+                if (event.key === 'ArrowDown') element.scrollBy({ top: step, behavior: 'smooth' });
+                if (event.key === 'Home') element.scrollTo({ top: 0, behavior: 'smooth' });
+                if (event.key === 'End') element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+              }}
+              className="relative flex h-64 w-3 touch-none cursor-ns-resize flex-col gap-px overflow-hidden rounded-full bg-slate-100 p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              {sampledResults.map((result, index) => (
+                <span key={`${result.source}-${result.id}-${index}`} className={`min-h-px flex-1 rounded-full ${sourceColor[result.source]}`} />
+              ))}
+              <span
+                className="pointer-events-none absolute left-1/2 h-3 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-900 shadow-md"
+                style={{ top: `${progress * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {showTopButton && (
+        <button
+          type="button"
+          onClick={() => scrollContainer.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition-all hover:-translate-y-0.5 hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          aria-label="맨 위로 이동"
+          title="맨 위로"
+        >
+          <IconArrowUp />
+        </button>
+      )}
+    </>
+  );
+}
+
 // ─── Result Card ──────────────────────────────────────────────────────────────
 
 function ResultCard({
@@ -242,6 +371,16 @@ function ResultCard({
           <div className="block w-full text-left">
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <SourceBadge source={result.source} fileType={result.fileType} />
+              {result.resultKind === 'attachment' && (
+                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">첨부파일</span>
+              )}
+              {result.source === 'drive' && result.matchType && (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  result.matchType === 'title' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+                }`}>
+                  {result.matchType === 'title' ? '제목 일치' : '본문·메타데이터 일치'}
+                </span>
+              )}
               {result.threadId && (
                 <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
                   스레드 · 검색 일치 {result.threadMatchCount ?? 1}개
@@ -293,6 +432,9 @@ function ResultCard({
                 ))}
               </span>
             )}
+            {result.resultKind === 'attachment' && result.fileSize ? (
+              <span className="mt-2 block text-[11px] text-slate-400">{formatFileSize(result.fileSize)}</span>
+            ) : null}
           </div>
         </div>
         <button
@@ -1149,6 +1291,8 @@ export default function SearchPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
   const [resultLayout, setResultLayout] = useState<'list' | 'grid'>('list');
+  const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'oldest'>('relevance');
+  const [pendingSearches, setPendingSearches] = useState<Array<{ id: string; label: string }>>([]);
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
@@ -1158,9 +1302,13 @@ export default function SearchPage() {
     dateRange: 'all',
   });
   const inputRef = useRef<HTMLInputElement>(null);
+  const mainScrollRef = useRef<HTMLElement>(null);
+  const searchSequenceRef = useRef(0);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
+    return () => searchAbortRef.current?.abort();
   }, []);
 
   const toggleSource = (source: SearchSource) => {
@@ -1200,6 +1348,10 @@ export default function SearchPage() {
       return;
     }
 
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    const searchSequence = ++searchSequenceRef.current;
     setIsLoading(true);
     setHasSearched(true);
     setSubmittedQuery(q);
@@ -1209,6 +1361,7 @@ export default function SearchPage() {
     setPreviewResult(null);
     setPreviewMattermostToken(null);
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
+    setPendingSearches([]);
 
     try {
       const jiraSources = filters.sources.filter((s) => s === 'jira' || s === 'confluence');
@@ -1234,62 +1387,76 @@ export default function SearchPage() {
           googleSearchAreas: filters.googleSearchAreas.join(','),
           dateRange: filters.dateRange,
           exclude: excludedKeywords,
-        })}`, { headers });
+        })}`, { headers, signal: controller.signal });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? '검색 중 오류가 발생했습니다.');
         return data as SearchResponse;
       };
 
-      const serverRequests: Array<{ label: string; request: Promise<SearchResponse> }> = [];
+      const serverRequests: Array<{ id: string; label: string; request: Promise<SearchResponse> }> = [];
       if (jiraSources.length > 0) {
         for (const connection of atlassianAuth.getConnections('workspace')) {
           const legacyConnection = !connection.products?.length;
-          const connectionSources = jiraSources.filter((source) =>
-            legacyConnection || connection.products?.includes(source === 'confluence' ? 'confluence' : 'jira')
-          );
-          if (connectionSources.length === 0) continue;
-          serverRequests.push({ label: connection.label, request: requestSearch(connectionSources, {
-            'x-atlassian-oauth-token': connection.accessToken,
-            'x-atlassian-cloud-id': connection.resource.id,
-            'x-atlassian-site-url': connection.resource.url,
-          }) });
+          for (const source of jiraSources) {
+            const product = source === 'confluence' ? 'confluence' : 'jira';
+            if (!legacyConnection && !connection.products?.includes(product)) continue;
+            const label = `${connection.label} ${source === 'confluence' ? 'Confluence' : 'Jira'}`;
+            serverRequests.push({ id: `${connection.id}-${source}`, label, request: requestSearch([source], {
+              'x-atlassian-oauth-token': connection.accessToken,
+              'x-atlassian-cloud-id': connection.resource.id,
+              'x-atlassian-site-url': connection.resource.url,
+            }) });
+          }
         }
       }
       const googleToken = google.getToken();
       if (driveSources.length > 0 && googleToken) {
-        serverRequests.push({ label: 'Google Drive', request: requestSearch(['drive'], { 'x-google-token': googleToken }) });
+        serverRequests.push({ id: 'google-drive', label: 'Google Drive', request: requestSearch(['drive'], { 'x-google-token': googleToken }) });
       }
 
       const mattermostToken = mattermost.getToken();
       if (activeSources.includes('mattermost') && mattermostToken) {
         serverRequests.push({
+          id: 'mattermost',
           label: 'Mattermost',
           request: requestSearch(['mattermost'], { 'x-mattermost-token': mattermostToken }),
         });
       }
 
-      const serverSettled = await Promise.allSettled(serverRequests.map((entry) => entry.request));
-      const serverResults = serverSettled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
-      const combinedResults = serverResults.flatMap((data) => data.results);
-      const combinedErrors: Record<string, string> = Object.assign({}, ...serverResults.map((data) => data.errors));
-      serverSettled.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          combinedErrors[`connection-${index}`] = `${serverRequests[index].label}: ${result.reason instanceof Error ? result.reason.message : '검색 실패'}`;
+      setPendingSearches(serverRequests.map(({ id, label }) => ({ id, label })));
+      await Promise.allSettled(serverRequests.map(async (entry) => {
+        try {
+          const data = await entry.request;
+          if (searchSequence !== searchSequenceRef.current) return;
+          setResults((current) => {
+            const merged = new Map(current.map((result) => [`${result.source}:${result.id}:${result.url}`, result]));
+            for (const result of data.results) merged.set(`${result.source}:${result.id}:${result.url}`, result);
+            return [...merged.values()];
+          });
+          setCounts((current) => ({
+            jira: current.jira + data.counts.jira,
+            confluence: current.confluence + data.counts.confluence,
+            jsm: current.jsm + data.counts.jsm,
+            drive: current.drive + data.counts.drive,
+            mattermost: current.mattermost + data.counts.mattermost,
+          }));
+          setErrors((current) => ({ ...current, ...data.errors }));
+        } catch (error) {
+          if (searchSequence !== searchSequenceRef.current || (error instanceof DOMException && error.name === 'AbortError')) return;
+          setErrors((current) => ({
+            ...current,
+            [`connection-${entry.id}`]: `${entry.label}: ${error instanceof Error ? error.message : '검색 실패'}`,
+          }));
+        } finally {
+          if (searchSequence === searchSequenceRef.current) {
+            setPendingSearches((current) => current.filter(({ id }) => id !== entry.id));
+          }
         }
-      });
-      setResults(combinedResults);
-      setCounts({
-        jira: serverResults.reduce((sum, data) => sum + data.counts.jira, 0),
-        confluence: serverResults.reduce((sum, data) => sum + data.counts.confluence, 0),
-        jsm: serverResults.reduce((sum, data) => sum + data.counts.jsm, 0),
-        drive: serverResults.reduce((sum, data) => sum + data.counts.drive, 0),
-        mattermost: serverResults.reduce((sum, data) => sum + data.counts.mattermost, 0),
-      });
-      setErrors(combinedErrors);
+      }));
     } catch (error) {
       setErrors({ global: error instanceof Error ? error.message : '서비스 연결에 실패했습니다.' });
     } finally {
-      setIsLoading(false);
+      if (searchSequence === searchSequenceRef.current) setIsLoading(false);
     }
   }, [query, excludedKeywords, filters, google, atlassianAuth, mattermost]);
 
@@ -1313,9 +1480,14 @@ export default function SearchPage() {
   const resultSourceOptions = allResultSourceOptions.filter(
     (option) => option.value === 'all' || option.count > 0
   );
-  const visibleResults = resultSource === 'all'
+  const sourceResults = resultSource === 'all'
     ? results
     : results.filter((result) => result.source === resultSource);
+  const visibleResults = [...sourceResults].sort((a, b) => {
+    if (sortMode === 'newest') return new Date(b.date).getTime() - new Date(a.date).getTime();
+    if (sortMode === 'oldest') return new Date(a.date).getTime() - new Date(b.date).getTime();
+    return (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
+  });
 
   const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
   const mattermostConnected = mattermost.connected;
@@ -1403,7 +1575,7 @@ export default function SearchPage() {
         />
 
         {/* Main */}
-        <main className="flex-1 overflow-y-auto bg-[#F4F5F7]">
+        <main ref={mainScrollRef} className="relative flex-1 overflow-y-auto bg-[#F4F5F7]">
           <div className="max-w-3xl mx-auto px-6 py-6">
             {/* Search and filters */}
             <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -1502,7 +1674,6 @@ export default function SearchPage() {
                         </span>
                       </label>
                     ))}
-                    <span className="text-[10px] font-medium text-emerald-700/70">조회 전용 · 수정 불가</span>
                   </div>
                 </div>
               )}
@@ -1531,7 +1702,7 @@ export default function SearchPage() {
             </div>
 
             {/* Loading skeleton */}
-            {isLoading && (
+            {isLoading && results.length === 0 && (
               <div className="space-y-2">
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
@@ -1545,7 +1716,7 @@ export default function SearchPage() {
             )}
 
             {/* Results */}
-            {!isLoading && hasSearched && (
+            {hasSearched && (
               <>
                 <div className="sticky top-0 z-10 mb-4 border-b border-slate-200 bg-slate-50/95 pt-1 backdrop-blur">
                   <p className="text-sm text-gray-600">
@@ -1579,7 +1750,19 @@ export default function SearchPage() {
                           );
                         })}
                       </div>
-                      <div className="mb-1 hidden flex-none items-center rounded-lg border border-slate-200 bg-white p-0.5 lg:flex" aria-label="결과 보기 방식">
+                      <div className="mb-1 flex flex-none items-center gap-2">
+                        <label className="sr-only" htmlFor="result-sort">결과 정렬</label>
+                        <select
+                          id="result-sort"
+                          value={sortMode}
+                          onChange={(event) => setSortMode(event.target.value as typeof sortMode)}
+                          className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        >
+                          <option value="relevance">관련도순</option>
+                          <option value="newest">최신순</option>
+                          <option value="oldest">오래된순</option>
+                        </select>
+                        <div className="hidden items-center rounded-lg border border-slate-200 bg-white p-0.5 lg:flex" aria-label="결과 보기 방식">
                         <button
                           type="button"
                           onClick={() => setResultLayout('list')}
@@ -1598,7 +1781,17 @@ export default function SearchPage() {
                         >
                           <IconGridLayout />
                         </button>
+                        </div>
                       </div>
+                    </div>
+                  )}
+                  {pendingSearches.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pb-2" aria-live="polite">
+                      {pendingSearches.map(({ id, label }) => (
+                        <span key={id} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">
+                          <IconSpinner /> {label} 검색 중
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1628,7 +1821,7 @@ export default function SearchPage() {
                     ))}
                   </div>
                 ) : (
-                  Object.keys(errors).length === 0 && (
+                  !isLoading && Object.keys(errors).length === 0 && (
                     <div className="text-center py-16">
                       <p className="text-sm font-medium text-gray-500">검색 결과가 없습니다.</p>
                       <p className="text-xs text-gray-400 mt-1">다른 검색어로 다시 시도해보세요.</p>
@@ -1658,6 +1851,7 @@ export default function SearchPage() {
               </div>
             )}
           </div>
+          <ResultScrollTools scrollContainer={mainScrollRef} results={visibleResults} />
         </main>
       </div>
 

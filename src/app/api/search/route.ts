@@ -234,7 +234,9 @@ async function searchConfluence(
   return (data.results ?? []).map((item: Record<string, unknown>) => {
     const content = item.content as Record<string, unknown> | null;
     const lastModifier = item.lastModifier as Record<string, string> | null;
-    const container = item.resultParentContainer as Record<string, string> | null;
+    const contentSpace = content?.space as Record<string, string> | null;
+    const globalContainer = item.resultGlobalContainer as Record<string, string> | null;
+    const parentContainer = item.resultParentContainer as Record<string, string> | null;
 
     return {
       id: (content?.id as string) ?? String(Math.random()),
@@ -244,7 +246,7 @@ async function searchConfluence(
       url: `${authConfig.baseUrl}/wiki${item.url as string}`,
       author: lastModifier?.displayName ?? '',
       date: item.lastModified as string,
-      space: container?.title ?? '',
+      space: contentSpace?.name || globalContainer?.title || parentContainer?.title || '',
       pageType: (content?.type as string) ?? 'page',
     };
   });

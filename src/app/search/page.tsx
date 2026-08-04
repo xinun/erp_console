@@ -7,6 +7,8 @@ import type {
   SearchFilters,
   SearchSource,
   GoogleFileType,
+  GoogleSearchArea,
+  MattermostThreadMessage,
   DateRange,
 } from '@/lib/types';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
@@ -204,31 +206,55 @@ function ResultCard({
     <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all group">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="mb-1.5">
-            <SourceBadge source={result.source} fileType={result.fileType} />
-          </div>
           <button
             type="button"
             onClick={() => onPreview(result)}
-            className="mb-1.5 block w-full text-left text-sm font-semibold leading-snug text-gray-900 hover:text-blue-600 focus-visible:outline-none focus-visible:underline"
+            className="block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
-            <HighlightedText text={result.title} query={query} />
-          </button>
-          {result.snippet && (
-            <p className="line-clamp-3 text-xs leading-relaxed text-gray-500">
-              <HighlightedText text={result.snippet} query={query} />
-            </p>
-          )}
-          {meta.length > 0 && (
-            <div className="flex flex-wrap items-center mt-2">
-              {meta.map((m, i) => (
-                <span key={i} className="text-xs text-gray-400">
-                  {i > 0 && <span className="mx-1.5">·</span>}
-                  {m}
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              <SourceBadge source={result.source} fileType={result.fileType} />
+              {result.threadId && (
+                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
+                  스레드 · 검색 일치 {result.threadMatchCount ?? 1}개
                 </span>
-              ))}
+              )}
             </div>
-          )}
+            <span className="mb-1.5 block text-sm font-semibold leading-snug text-gray-900 transition-colors hover:text-blue-600">
+              <HighlightedText text={result.title} query={query} />
+            </span>
+            {result.source === 'mattermost' && result.threadMessages ? (
+              <span className="mt-2 block space-y-2 border-l-2 border-rose-100 pl-3">
+                {result.threadMessages.slice(0, 2).map((message) => (
+                  <span key={message.id} className="block">
+                    <span className="mb-0.5 flex items-center gap-2 text-[11px]">
+                      <span className="font-semibold text-slate-600">{message.author}</span>
+                      <span className="text-slate-400">{formatDate(message.date)}</span>
+                    </span>
+                    <span className="line-clamp-2 block text-xs leading-relaxed text-slate-500">
+                      <HighlightedText text={message.message} query={query} />
+                    </span>
+                  </span>
+                ))}
+                {result.threadMessages.length > 2 && (
+                  <span className="block text-[11px] font-medium text-rose-500">일치 메시지 {result.threadMessages.length - 2}개 더 보기</span>
+                )}
+              </span>
+            ) : result.snippet && (
+              <span className="line-clamp-3 block text-xs leading-relaxed text-gray-500">
+                <HighlightedText text={result.snippet} query={query} />
+              </span>
+            )}
+            {meta.length > 0 && (
+              <span className="mt-2 flex flex-wrap items-center">
+                {meta.map((m, i) => (
+                  <span key={i} className="text-xs text-gray-400">
+                    {i > 0 && <span className="mx-1.5">·</span>}
+                    {m}
+                  </span>
+                ))}
+              </span>
+            )}
+          </button>
         </div>
         <button
           type="button"
@@ -245,13 +271,42 @@ function ResultCard({
 function ResultPreview({
   result,
   query,
+  mattermostToken,
   onClose,
 }: {
   result: SearchResult;
   query: string;
+  mattermostToken?: string | null;
   onClose: () => void;
 }) {
   const isJira = result.source === 'jira' || result.source === 'jsm';
+  const isMattermost = result.source === 'mattermost';
+  const [threadMessages, setThreadMessages] = useState<MattermostThreadMessage[]>(result.threadMessages ?? []);
+  const [threadLoading, setThreadLoading] = useState(Boolean(isMattermost && result.threadId && mattermostToken));
+  const [threadError, setThreadError] = useState('');
+
+  useEffect(() => {
+    if (!isMattermost || !result.threadId || !mattermostToken) return;
+    const controller = new AbortController();
+    fetch(`/api/mattermost/thread?${new URLSearchParams({ postId: result.threadId })}`, {
+      headers: { 'x-mattermost-token': mattermostToken },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? '스레드를 불러오지 못했습니다.');
+        setThreadMessages(data.messages as MattermostThreadMessage[]);
+        setThreadError('');
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setThreadError(error instanceof Error ? error.message : '스레드를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setThreadLoading(false);
+      });
+    return () => controller.abort();
+  }, [isMattermost, mattermostToken, result.threadId]);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-5">
@@ -375,6 +430,44 @@ function ResultPreview({
                 )}
               </aside>
             </div>
+          ) : isMattermost && result.threadId ? (
+            <section>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">전체 스레드</h3>
+                  <p className="mt-0.5 text-xs text-slate-400">검색어와 일치한 메시지는 강조해서 표시됩니다.</p>
+                </div>
+                <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">{threadMessages.length}개 메시지</span>
+              </div>
+              {threadLoading && threadMessages.length === 0 ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
+                </div>
+              ) : (
+                <div className="relative space-y-3 before:absolute before:bottom-5 before:left-4 before:top-5 before:w-px before:bg-slate-200">
+                  {threadMessages.map((message, index) => (
+                    <article key={message.id} className="relative flex gap-3">
+                      <span className={`z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${index === 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {message.author.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-xs font-semibold text-slate-800">{message.author}</span>
+                          <span className="text-[11px] text-slate-400">{formatDate(message.date)}</span>
+                          {index === 0 && <span className="text-[10px] font-medium text-rose-500">스레드 시작</span>}
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                          <HighlightedText text={message.message} query={query} />
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {threadError && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">{threadError} 검색에 일치한 메시지만 표시합니다.</p>
+              )}
+            </section>
           ) : (result.content || result.snippet) ? (
             <p className="whitespace-pre-wrap text-sm leading-7 text-slate-600">
               <HighlightedText text={result.content || result.snippet} query={query} />
@@ -1014,9 +1107,11 @@ export default function SearchPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
+  const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
     sources: ['jira', 'confluence', 'drive', 'mattermost'],
     googleFileTypes: ['docs', 'sheets', 'slides', 'files'],
+    googleSearchAreas: ['user', 'sharedDrives', 'domain'],
     dateRange: 'all',
   });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1041,6 +1136,14 @@ export default function SearchPage() {
     setFilters({ ...filters, googleFileTypes: next });
   };
 
+  const toggleGoogleSearchArea = (area: GoogleSearchArea) => {
+    const next = filters.googleSearchAreas.includes(area)
+      ? filters.googleSearchAreas.filter((item) => item !== area)
+      : [...filters.googleSearchAreas, area];
+    if (next.length === 0) return;
+    setFilters({ ...filters, googleSearchAreas: next });
+  };
+
   const handleSearch = useCallback(async () => {
     const q = query.trim();
     if (!q) return;
@@ -1061,6 +1164,7 @@ export default function SearchPage() {
     setResults([]);
     setResultSource('all');
     setPreviewResult(null);
+    setPreviewMattermostToken(null);
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
 
     try {
@@ -1084,6 +1188,7 @@ export default function SearchPage() {
           q,
           sources: sources.join(','),
           googleFileTypes: filters.googleFileTypes.join(','),
+          googleSearchAreas: filters.googleSearchAreas.join(','),
           dateRange: filters.dateRange,
           exclude: excludedKeywords,
         })}`, { headers });
@@ -1149,6 +1254,11 @@ export default function SearchPage() {
     if (e.key === 'Enter') handleSearch();
   };
 
+  const handlePreview = (result: SearchResult) => {
+    setPreviewResult(result);
+    setPreviewMattermostToken(result.source === 'mattermost' ? mattermost.getToken() : null);
+  };
+
   const totalCount = counts.jira + counts.confluence + counts.drive + counts.mattermost;
   const allResultSourceOptions: { value: 'all' | SearchSource; label: string; count: number }[] = [
     { value: 'all', label: '전체', count: totalCount },
@@ -1178,6 +1288,11 @@ export default function SearchPage() {
     { value: 'sheets', label: 'Sheets' },
     { value: 'slides', label: 'Slides' },
     { value: 'files', label: '일반 파일' },
+  ];
+  const googleSearchAreaOptions: { value: GoogleSearchArea; label: string }[] = [
+    { value: 'user', label: '내 파일·공유받은 파일' },
+    { value: 'sharedDrives', label: '공유 드라이브' },
+    { value: 'domain', label: '회사 전체 공개 문서' },
   ];
   const dateOptions: { value: DateRange; label: string }[] = [
     { value: 'all', label: '전체 기간' },
@@ -1308,24 +1423,44 @@ export default function SearchPage() {
               </div>
 
               {filters.sources.includes('drive') && (
-                <div className={`mt-2 flex flex-wrap items-center gap-2 pl-1 ${google.connected ? '' : 'pointer-events-none opacity-35'}`}>
-                  <span className="mr-1 text-[11px] font-semibold text-slate-400">Google 파일 유형</span>
-                  {googleFileTypeOptions.map(({ value, label }) => (
-                    <label key={value} className="cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.googleFileTypes.includes(value)}
-                        onChange={() => toggleGoogleFileType(value)}
-                        disabled={!google.connected}
-                        className="peer sr-only"
-                      />
-                      <span className="flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-slate-300 peer-checked:border-emerald-200 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500">
-                        {filters.googleFileTypes.includes(value) && <IconCheck />}
-                        {label}
-                      </span>
-                    </label>
-                  ))}
-                  <span className="text-[10px] text-slate-400">선택한 형식만 검색</span>
+                <div className={`mt-2 space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-2.5 ${google.connected ? '' : 'pointer-events-none opacity-35'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-1 text-[11px] font-semibold text-emerald-700">Google 검색 위치</span>
+                    {googleSearchAreaOptions.map(({ value, label }) => (
+                      <label key={value} className="cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filters.googleSearchAreas.includes(value)}
+                          onChange={() => toggleGoogleSearchArea(value)}
+                          disabled={!google.connected}
+                          className="peer sr-only"
+                        />
+                        <span className="flex h-7 items-center gap-1.5 rounded-full border border-emerald-100 bg-white px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-emerald-200 peer-checked:border-emerald-300 peer-checked:bg-emerald-100 peer-checked:text-emerald-800 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500">
+                          {filters.googleSearchAreas.includes(value) && <IconCheck />}
+                          {label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-1 text-[11px] font-semibold text-emerald-700">파일 유형</span>
+                    {googleFileTypeOptions.map(({ value, label }) => (
+                      <label key={value} className="cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filters.googleFileTypes.includes(value)}
+                          onChange={() => toggleGoogleFileType(value)}
+                          disabled={!google.connected}
+                          className="peer sr-only"
+                        />
+                        <span className="flex h-7 items-center gap-1.5 rounded-full border border-emerald-100 bg-white px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-emerald-200 peer-checked:border-emerald-300 peer-checked:bg-emerald-100 peer-checked:text-emerald-800 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500">
+                          {filters.googleFileTypes.includes(value) && <IconCheck />}
+                          {label}
+                        </span>
+                      </label>
+                    ))}
+                    <span className="text-[10px] font-medium text-emerald-700/70">조회 전용 · 수정 불가</span>
+                  </div>
                 </div>
               )}
 
@@ -1419,7 +1554,7 @@ export default function SearchPage() {
                         key={`${result.source}-${result.id}`}
                         result={result}
                         query={submittedQuery}
-                        onPreview={setPreviewResult}
+                        onPreview={handlePreview}
                       />
                     ))}
                   </div>
@@ -1470,7 +1605,11 @@ export default function SearchPage() {
         <ResultPreview
           result={previewResult}
           query={submittedQuery}
-          onClose={() => setPreviewResult(null)}
+          mattermostToken={previewMattermostToken}
+          onClose={() => {
+            setPreviewResult(null);
+            setPreviewMattermostToken(null);
+          }}
         />
       )}
     </div>

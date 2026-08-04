@@ -10,6 +10,8 @@ export type SearchSource = 'jira' | 'confluence' | 'jsm' | 'drive' | 'mattermost
 
 export type GoogleFileType = 'docs' | 'sheets' | 'slides' | 'files';
 
+export type GoogleSearchArea = 'user' | 'sharedDrives' | 'domain';
+
 export interface SearchComment {
   id: string;
   author: string;
@@ -17,6 +19,13 @@ export interface SearchComment {
   body: string;
   created: string;
   updated?: string;
+}
+
+export interface MattermostThreadMessage {
+  id: string;
+  author: string;
+  message: string;
+  date: string;
 }
 
 export interface SearchResult {
@@ -47,6 +56,9 @@ export interface SearchResult {
   // Mattermost specific
   team?: string;
   channelName?: string;
+  threadId?: string;
+  threadMessages?: MattermostThreadMessage[];
+  threadMatchCount?: number;
 }
 
 export interface SearchCounts {
@@ -68,5 +80,6 @@ export type DateRange = 'all' | '1w' | '1m' | '3m';
 export interface SearchFilters {
   sources: SearchSource[];
   googleFileTypes: GoogleFileType[];
+  googleSearchAreas: GoogleSearchArea[];
   dateRange: DateRange;
 }

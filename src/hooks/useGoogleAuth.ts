@@ -48,13 +48,16 @@ export function useGoogleAuth(): GoogleAuthState {
 
   // 기존 토큰 확인
   useEffect(() => {
-    const token = localStorage.getItem(GOOGLE_TOKEN_KEY);
-    const expiry = localStorage.getItem(GOOGLE_EXPIRY_KEY);
-    const savedEmail = localStorage.getItem(GOOGLE_EMAIL_KEY);
-    if (token && expiry && Number(expiry) > Date.now()) {
-      setConnected(true);
-      setEmail(savedEmail ?? '');
-    }
+    const timer = window.setTimeout(() => {
+      const token = localStorage.getItem(GOOGLE_TOKEN_KEY);
+      const expiry = localStorage.getItem(GOOGLE_EXPIRY_KEY);
+      const savedEmail = localStorage.getItem(GOOGLE_EMAIL_KEY);
+      if (token && expiry && Number(expiry) > Date.now()) {
+        setConnected(true);
+        setEmail(savedEmail ?? '');
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const initTokenClient = useCallback(() => {

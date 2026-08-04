@@ -14,6 +14,10 @@
 - Google Drive 검색에서 Docs, Sheets, Slides, 일반 파일 유형을 각각 선택할 수 있도록 추가했다.
 - Google OAuth 권한을 파일 본문 읽기가 가능한 `drive.readonly`에서 메타데이터 검색 전용 `drive.metadata.readonly`로 축소하고, 새 access token에 이전 권한을 합치지 않도록 설정했다. 기존 연결 사용자는 연결 해제 후 다시 동의해야 한다.
 - Google 연결 해제 시 브라우저 저장값뿐 아니라 Google에 발급된 OAuth 권한도 함께 취소하도록 보완했다.
+- Google 검색 위치를 `내 파일·공유받은 파일`, `공유 드라이브`, `회사 전체 공개 문서`로 나누고 모두 기본 선택하도록 추가했다. 각 Drive 검색 컬렉션의 결과는 파일 ID로 중복 제거한다.
+- Google 연동은 `drive.metadata.readonly`와 GET 검색만 사용하며 파일 수정·업로드·삭제 권한을 요청하지 않는다.
+- Mattermost 검색 결과는 같은 스레드의 일치 메시지를 한 카드로 묶고, 미리보기에서 전체 스레드를 필요할 때만 조회하도록 개선했다.
+- 검색 결과 카드의 제목뿐 아니라 본문과 메타데이터 영역을 클릭해도 미리보기가 열리도록 변경했다.
 
 - 회사 Jira와 Confluence가 서로 다른 계정을 사용하는 구조에 맞춰 Atlassian 연결을 제품별로 분리했다.
 - OAuth 완료 시 연결된 Atlassian 계정 이름과 이메일을 표시하도록 추가했다.
@@ -57,18 +61,17 @@
 
 - `git diff --check`: 통과
 - `npm run build`: 통과
-- `npm run lint`: 기존 `src/hooks/useGoogleAuth.ts:54`의 `react-hooks/set-state-in-effect` 오류로 실패
+- `npm run lint`: 통과
 
 `npm ci`는 완료됐다. 현재 Node.js `v20.14.0`에서 일부 패키지가 더 높은 Node.js 20 패치 버전을 요구한다는 경고와 의존성 보안 경고 4건이 확인됐다.
 
 ## 다음 할 일
 
-1. `src/hooks/useGoogleAuth.ts`의 기존 린트 오류를 별도 수정한다.
-2. Node.js를 패키지가 지원하는 최신 LTS 패치 버전으로 준비한다.
-3. 의존성 보안 경고 4건의 영향 범위를 검토한다.
-4. Vercel에 최신 커밋을 배포한다.
-5. 운영 주소에서 Atlassian OAuth 연결을 다시 테스트한다.
-6. Jira, Confluence, JSM 검색을 각각 확인한다.
+1. Node.js를 패키지가 지원하는 최신 LTS 패치 버전으로 준비한다.
+2. 의존성 보안 경고 4건의 영향 범위를 검토한다.
+3. Vercel에 최신 커밋을 배포한다.
+4. 운영 주소에서 Atlassian OAuth 연결을 다시 테스트한다.
+5. Jira, Confluence, JSM 검색을 각각 확인한다.
 
 ## OAuth 점검표
 

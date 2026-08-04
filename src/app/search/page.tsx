@@ -272,6 +272,7 @@ function ResultScrollTools({
     <>
       {results.length > 5 && (
         <div className="group fixed right-4 top-1/2 z-20 hidden -translate-y-1/2 items-center xl:flex">
+          <span aria-hidden="true" className="absolute right-full top-0 h-full w-5" />
           <div className="pointer-events-none absolute right-full mr-3 w-44 translate-x-2 rounded-xl border border-black/10 bg-white/90 p-2 opacity-0 shadow-xl backdrop-blur transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100">
             <div className="mb-1 flex items-center justify-between px-2 py-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40">결과 이동</span>

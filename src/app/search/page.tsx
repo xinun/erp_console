@@ -111,6 +111,23 @@ function IconMinusCircle() {
   );
 }
 
+function IconListLayout() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconGridLayout() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
 function IconService({ type }: { type: NonNullable<DrawerType> }) {
   const iconClass = 'h-4 w-4';
   if (type === 'google') {
@@ -187,6 +204,7 @@ function ResultCard({
   query: string;
   onPreview: (result: SearchResult) => void;
 }) {
+  const [threadExpanded, setThreadExpanded] = useState(false);
   const meta: string[] = [];
   if (result.source === 'jira' || result.source === 'jsm') {
     if (result.key) meta.push(result.key);
@@ -202,15 +220,26 @@ function ResultCard({
   if (result.author && result.source !== 'mattermost') meta.push(result.author);
   if (result.date) meta.push(formatDate(result.date));
 
+  const openPreview = () => onPreview(result);
+  const visibleThreadMessages = threadExpanded ? result.threadMessages : result.threadMessages?.slice(0, 1);
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all group">
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={openPreview}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openPreview();
+        }
+      }}
+      className="group h-full cursor-pointer rounded-xl border border-slate-200 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      aria-label={`${result.title} 미리보기`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <button
-            type="button"
-            onClick={() => onPreview(result)}
-            className="block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
+          <div className="block w-full text-left">
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <SourceBadge source={result.source} fileType={result.fileType} />
               {result.threadId && (
@@ -222,9 +251,9 @@ function ResultCard({
             <span className="mb-1.5 block text-sm font-semibold leading-snug text-gray-900 transition-colors hover:text-blue-600">
               <HighlightedText text={result.title} query={query} />
             </span>
-            {result.source === 'mattermost' && result.threadMessages ? (
+            {result.source === 'mattermost' && visibleThreadMessages ? (
               <span className="mt-2 block space-y-2 border-l-2 border-rose-100 pl-3">
-                {result.threadMessages.slice(0, 2).map((message) => (
+                {visibleThreadMessages.map((message) => (
                   <span key={message.id} className="block">
                     <span className="mb-0.5 flex items-center gap-2 text-[11px]">
                       <span className="font-semibold text-slate-600">{message.author}</span>
@@ -235,12 +264,22 @@ function ResultCard({
                     </span>
                   </span>
                 ))}
-                {result.threadMessages.length > 2 && (
-                  <span className="block text-[11px] font-medium text-rose-500">일치 메시지 {result.threadMessages.length - 2}개 더 보기</span>
+                {result.threadMessages && result.threadMessages.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setThreadExpanded((current) => !current);
+                    }}
+                    className="block text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                    aria-expanded={threadExpanded}
+                  >
+                    {threadExpanded ? '일치 메시지 접기' : `일치 메시지 ${result.threadMessages.length - 1}개 더 보기`}
+                  </button>
                 )}
               </span>
             ) : result.snippet && (
-              <span className="line-clamp-3 block text-xs leading-relaxed text-gray-500">
+              <span className="line-clamp-2 block text-xs leading-relaxed text-gray-500">
                 <HighlightedText text={result.snippet} query={query} />
               </span>
             )}
@@ -254,17 +293,20 @@ function ResultCard({
                 ))}
               </span>
             )}
-          </button>
+          </div>
         </div>
         <button
           type="button"
-          onClick={() => onPreview(result)}
+          onClick={(event) => {
+            event.stopPropagation();
+            openPreview();
+          }}
           className="mt-0.5 flex flex-shrink-0 items-center gap-1 text-xs text-gray-400 opacity-0 transition-opacity hover:text-blue-600 group-hover:opacity-100 focus-visible:opacity-100"
         >
           미리보기 <IconChevronRight />
         </button>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -1106,6 +1148,7 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
+  const [resultLayout, setResultLayout] = useState<'list' | 'grid'>('list');
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
@@ -1504,32 +1547,58 @@ export default function SearchPage() {
             {/* Results */}
             {!isLoading && hasSearched && (
               <>
-                <div className="mb-3">
+                <div className="sticky top-0 z-10 mb-4 border-b border-slate-200 bg-slate-50/95 pt-1 backdrop-blur">
                   <p className="text-sm text-gray-600">
                     <span className="font-semibold text-gray-900">&apos;{submittedQuery}&apos;</span>{' '}
                     검색 결과{' '}
                     <span className="font-semibold text-blue-600">{totalCount}건</span>
                   </p>
                   {totalCount > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="결과 서비스 필터">
-                      {resultSourceOptions.map((option) => {
-                        const active = resultSource === option.value;
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setResultSource(option.value)}
-                            aria-pressed={active}
-                            className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                              active
-                                ? 'border-slate-800 bg-slate-800 text-white shadow-sm'
-                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700'
-                            }`}
-                          >
-                            {option.label} <span className={active ? 'text-slate-300' : 'text-slate-400'}>{option.count}</span>
-                          </button>
-                        );
-                      })}
+                    <div className="mt-2 flex items-end justify-between gap-3">
+                      <div className="flex min-w-0 gap-1 overflow-x-auto" role="tablist" aria-label="결과 서비스 필터">
+                        {resultSourceOptions.map((option) => {
+                          const active = resultSource === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="tab"
+                              onClick={() => setResultSource(option.value)}
+                              aria-selected={active}
+                              className={`relative flex flex-none items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                                active
+                                  ? 'border-blue-600 text-blue-700'
+                                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
+                              }`}
+                            >
+                              {option.label}
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'}`}>
+                                {option.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="mb-1 hidden flex-none items-center rounded-lg border border-slate-200 bg-white p-0.5 lg:flex" aria-label="결과 보기 방식">
+                        <button
+                          type="button"
+                          onClick={() => setResultLayout('list')}
+                          aria-label="한 줄 보기"
+                          aria-pressed={resultLayout === 'list'}
+                          className={`rounded-md p-1.5 transition-colors ${resultLayout === 'list' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                        >
+                          <IconListLayout />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResultLayout('grid')}
+                          aria-label="두 열 보기"
+                          aria-pressed={resultLayout === 'grid'}
+                          className={`rounded-md p-1.5 transition-colors ${resultLayout === 'grid' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                        >
+                          <IconGridLayout />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1548,7 +1617,7 @@ export default function SearchPage() {
                 )}
 
                 {visibleResults.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className={resultLayout === 'grid' ? 'grid gap-3 lg:grid-cols-2' : 'space-y-2'}>
                     {visibleResults.map((result) => (
                       <ResultCard
                         key={`${result.source}-${result.id}`}

@@ -549,7 +549,7 @@ function AtlassianDrawerContent({ kind, atlassianAuth }: AtlassianDrawerProps) {
           disabled={atlassianAuth.loading}
           className="h-10 w-full rounded-md bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {atlassianAuth.loading ? '연결 중...' : isJsm ? '고객 문의 계정 연결' : '문서·개발 계정 연결'}
+          {atlassianAuth.loading ? '연결 중...' : isJsm ? '고객 문의 계정 연결' : '계정 연결'}
         </button>
       </div>}
     </div>
@@ -834,7 +834,7 @@ function Sidebar({
   const [showAddMenu, setShowAddMenu] = useState(false);
   const groups: ServiceGroup[] = [
     {
-      groupLabel: '문서·개발',
+      groupLabel: 'Jira & Confluence',
       drawerType: 'atlassian',
       services: workspaceConnections.map((connection) => ({
         name: connection.label,
@@ -1195,7 +1195,7 @@ export default function SearchPage() {
               <div className="my-3 border-t border-gray-100" />
               <p className="mb-2 text-xs font-medium text-gray-500">연결된 서비스</p>
               <div className="space-y-1 text-xs text-gray-600">
-                <p>문서·개발 Atlassian {atlassianAuth.getConnections('workspace').length}개</p>
+                <p>문서 Atlassian {atlassianAuth.getConnections('workspace').length}개</p>
                 <p>Google Drive {google.connected ? '연결됨' : '미연결'}</p>
                 <p>Mattermost {mattermost.connected ? '연결됨' : '미연결'}</p>
               </div>

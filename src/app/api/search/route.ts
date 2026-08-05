@@ -366,6 +366,7 @@ interface MattermostPost {
   channel_id?: string;
   create_at?: number;
   root_id?: string;
+  reply_count?: number;
 }
 
 interface MattermostTeam {
@@ -604,7 +605,7 @@ async function searchMattermost(
       result,
       groupKey: `${team.id}:${post.root_id || post.id}`,
       threadId: post.root_id || post.id,
-      isThread: Boolean(post.root_id),
+      isThread: Boolean(post.root_id) || (post.reply_count ?? 0) > 0,
     };
   });
 

@@ -1,6 +1,6 @@
 # 현재 작업 상태
 
-마지막 갱신: 2026-08-04
+마지막 갱신: 2026-08-05
 
 ## 현재 기준
 
@@ -10,6 +10,7 @@
 
 ## 최근 완료
 
+- Mattermost 검색 결과의 루트 메시지에 검색어가 일치하고 답글에는 일치하지 않는 경우에도 `reply_count`를 기준으로 스레드 카드와 전체 스레드 미리보기를 표시하도록 보완했다.
 - 검색 범위의 Jira, Confluence, Google Drive, Mattermost를 초기값으로 모두 선택하도록 변경했다.
 - Google Drive 검색에서 Docs, Sheets, Slides, 일반 파일 유형을 각각 선택할 수 있도록 추가했다.
 - Google OAuth 권한을 파일 본문 읽기가 가능한 `drive.readonly`에서 메타데이터 검색 전용 `drive.metadata.readonly`로 축소하고, 새 access token에 이전 권한을 합치지 않도록 설정했다. 기존 연결 사용자는 연결 해제 후 다시 동의해야 한다.
@@ -74,10 +75,10 @@
 ## 검증 상태
 
 - `git diff --check`: 통과
-- `npm run build`: 통과
-- `npm run lint`: 통과
+- `npm run build`: 이전 작업에서 통과. 2026-08-05 변경은 `npm ci`가 Windows 파일 잠금으로 완료되지 않아 재검증하지 못했다.
+- `npm run lint`: 이전 작업에서 통과. 2026-08-05 변경은 `npm ci`가 Windows 파일 잠금으로 완료되지 않아 재검증하지 못했다.
 
-`npm ci`는 완료됐다. 현재 Node.js `v20.14.0`에서 일부 패키지가 더 높은 Node.js 20 패치 버전을 요구한다는 경고와 의존성 보안 경고 4건이 확인됐다.
+2026-08-05의 `npm ci` 재실행은 npm 캐시 접근 제한을 승인한 뒤에도 `node_modules` 파일 잠금과 장시간 대기로 완료되지 않았다. 기존 작업에서는 Node.js `v20.14.0`에서 일부 패키지가 더 높은 Node.js 20 패치 버전을 요구한다는 경고와 의존성 보안 경고 4건이 확인됐다.
 
 ## 다음 할 일
 

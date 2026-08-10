@@ -1739,10 +1739,10 @@ export default function SearchPage() {
               </div>
 
               {filters.sources.includes('drive') && (
-                <div className={`mt-3 grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:grid-cols-2 ${google.connected ? '' : 'pointer-events-none opacity-40'}`}>
-                  <fieldset>
-                    <legend className="mb-2 text-xs font-semibold text-[var(--text-primary)]">Google 검색 위치</legend>
-                    <div className="space-y-2">
+                <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${google.connected ? '' : 'pointer-events-none opacity-40'}`}>
+                  <fieldset className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <legend className="px-1 text-xs font-semibold text-[var(--text-primary)]">Google 검색 위치</legend>
+                    <div className="mt-1 space-y-2">
                       {googleSearchAreaOptions.map(({ value, label }) => (
                         <label key={value} className="flex cursor-pointer items-start gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                           <input
@@ -1754,15 +1754,19 @@ export default function SearchPage() {
                           />
                           <span>
                             {label}
-                            {value === 'domain' && <span className="ml-1.5 font-normal text-[var(--text-tertiary)]">Workspace 계정 전용</span>}
+                            {value === 'domain' && (
+                              <span className="ml-2 inline-flex rounded border border-[var(--border)] px-1.5 py-0.5 align-middle text-[10px] font-medium leading-none text-[var(--text-tertiary)]">
+                                Workspace 전용
+                              </span>
+                            )}
                           </span>
                         </label>
                       ))}
                     </div>
                   </fieldset>
-                  <fieldset>
-                    <legend className="mb-2 text-xs font-semibold text-[var(--text-primary)]">파일 유형</legend>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <fieldset className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <legend className="px-1 text-xs font-semibold text-[var(--text-primary)]">파일 유형</legend>
+                    <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-2">
                       {googleFileTypeOptions.map(({ value, label }) => (
                         <label key={value} className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                           <input

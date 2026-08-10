@@ -345,7 +345,7 @@ function ResultScrollTools({
         <button
           type="button"
           onClick={() => scrollContainer.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition-all hover:-translate-y-0.5 hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="fixed bottom-6 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition-all hover:-translate-y-0.5 hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
           aria-label="맨 위로 이동"
           title="맨 위로"
         >
@@ -397,7 +397,7 @@ function ResultCard({
           openPreview();
         }
       }}
-      className="group h-full cursor-pointer rounded-xl border border-slate-200 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      className="group h-full cursor-pointer rounded-xl border border-slate-200 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
       aria-label={`${result.title} 미리보기`}
       data-result-source={result.source}
     >
@@ -411,7 +411,7 @@ function ResultCard({
               )}
               {result.source === 'drive' && result.matchType && (
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  result.matchType === 'title' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+                  result.matchType === 'title' ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-700'
                 }`}>
                   {result.matchType === 'title' ? '제목 일치' : '본문·메타데이터 일치'}
                 </span>
@@ -422,7 +422,7 @@ function ResultCard({
                 </span>
               )}
             </div>
-            <span className="mb-1.5 block text-sm font-semibold leading-snug text-gray-900 transition-colors hover:text-blue-600">
+            <span className="mb-1.5 block text-sm font-semibold leading-snug text-gray-900 transition-colors hover:text-slate-600">
               <HighlightedText text={result.title} query={query} />
             </span>
             {result.source === 'mattermost' && visibleThreadMessages ? (
@@ -1216,7 +1216,7 @@ function Sidebar({
                     key={service.name}
                     type="button"
                     onClick={() => onServiceClick(group.drawerType)}
-                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
                   >
                     <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400 ring-2 ring-emerald-50" />
                     <div className="min-w-0 flex-1">
@@ -1246,13 +1246,13 @@ function Sidebar({
             onClick={() => setShowAddMenu((current) => !current)}
             aria-expanded={showAddMenu}
             aria-controls="sidebar-add-service-menu"
-            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
               showAddMenu
-                ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
-                : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-md'
+                ? 'border-slate-400 bg-slate-100 text-slate-900 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:-translate-y-0.5 hover:border-slate-400 hover:text-slate-900 hover:shadow-md'
             }`}
           >
-            <span className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${showAddMenu ? 'bg-blue-100' : 'bg-slate-100'}`}>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 transition-colors">
               <IconPlus />
             </span>
             <span className="flex-1 text-left">연결 추가</span>
@@ -1278,9 +1278,9 @@ function Sidebar({
                     onServiceClick(group.drawerType);
                   }}
                   tabIndex={showAddMenu ? 0 : -1}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
                 >
-                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-blue-50 group-hover:text-blue-600">
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200 group-hover:text-slate-900">
                     <IconService type={group.drawerType as NonNullable<DrawerType>} />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -1291,7 +1291,7 @@ function Sidebar({
                         : group.drawerType === 'atlassian' ? 'Jira, Confluence' : 'Jira Service Management'}
                     </span>
                   </span>
-                  <span className="text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-blue-500">
+                  <span className="text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-slate-700">
                     <IconChevronRight />
                   </span>
                 </button>
@@ -1576,7 +1576,7 @@ export default function SearchPage() {
       {/* Header */}
       <header className="h-14 flex-shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900">
             <IconSearch size={13} className="text-white" />
           </div>
           <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
@@ -1679,7 +1679,7 @@ export default function SearchPage() {
             <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex gap-2">
                 <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-primary)]">
                     <IconSearch size={15} />
                   </span>
                   <input
@@ -1689,13 +1689,13 @@ export default function SearchPage() {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="검색어를 입력하세요"
-                    className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-sm placeholder-slate-400 transition-shadow focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-sm placeholder-slate-400 transition-shadow focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
                   />
                 </div>
                 <button
                   onClick={handleSearch}
                   disabled={isLoading || !query.trim()}
-                  className="flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isLoading && <IconSpinner />}
                   검색
@@ -1716,7 +1716,7 @@ export default function SearchPage() {
                           checked={filters.sources.includes(value)}
                           onChange={() => available && toggleSource(value)}
                           disabled={!available}
-                          className="h-4 w-4 rounded border-[var(--border)] accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                          className="h-4 w-4 rounded border-[var(--border)] accent-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                         />
                         {label}
                       </label>
@@ -1728,7 +1728,7 @@ export default function SearchPage() {
                       value={filters.dateRange}
                       onChange={(event) => setFilters({ ...filters, dateRange: event.target.value as DateRange })}
                       aria-label="검색 기간"
-                      className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] outline-none transition-colors hover:border-[var(--text-tertiary)] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] outline-none transition-colors hover:border-[var(--text-tertiary)] focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20"
                     >
                       {dateOptions.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -1750,7 +1750,7 @@ export default function SearchPage() {
                             checked={filters.googleSearchAreas.includes(value)}
                             onChange={() => toggleGoogleSearchArea(value)}
                             disabled={!google.connected}
-                            className="mt-px h-4 w-4 rounded border-[var(--border)] accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                            className="mt-px h-4 w-4 rounded border-[var(--border)] accent-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                           />
                           <span>
                             {label}
@@ -1774,7 +1774,7 @@ export default function SearchPage() {
                             checked={filters.googleFileTypes.includes(value)}
                             onChange={() => toggleGoogleFileType(value)}
                             disabled={!google.connected}
-                            className="h-4 w-4 rounded border-[var(--border)] accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                            className="h-4 w-4 rounded border-[var(--border)] accent-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                           />
                           {label}
                         </label>
@@ -1828,7 +1828,7 @@ export default function SearchPage() {
                   <p className="text-sm text-gray-600">
                     <span className="font-semibold text-gray-900">&apos;{submittedQuery}&apos;</span>{' '}
                     검색 결과{' '}
-                    <span className="font-semibold text-blue-600">{totalCount}건</span>
+                    <span className="font-semibold text-[var(--text-primary)]">{totalCount}건</span>
                   </p>
                   {totalCount > 0 && (
                     <div className="mt-2 flex items-end justify-between gap-3">
@@ -1842,14 +1842,14 @@ export default function SearchPage() {
                               role="tab"
                               onClick={() => setResultSource(option.value)}
                               aria-selected={active}
-                              className={`relative flex flex-none items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                              className={`relative flex flex-none items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-500 ${
                                 active
-                                  ? 'border-blue-600 text-blue-700'
+                                  ? 'border-slate-900 text-[var(--text-primary)]'
                                   : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
                               }`}
                             >
                               {option.label}
-                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'}`}>
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-slate-200 text-slate-800' : 'bg-slate-200 text-slate-500'}`}>
                                 {option.count}
                               </span>
                             </button>
@@ -1862,7 +1862,7 @@ export default function SearchPage() {
                           id="result-sort"
                           value={sortMode}
                           onChange={(event) => setSortMode(event.target.value as typeof sortMode)}
-                          className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20"
                         >
                           <option value="relevance">관련도순</option>
                           <option value="newest">최신순</option>
@@ -1894,7 +1894,7 @@ export default function SearchPage() {
                   {pendingSearches.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5 pb-2" aria-live="polite">
                       {pendingSearches.map(({ id, label }) => (
-                        <span key={id} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700">
+                        <span key={id} className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-1 text-[10px] font-medium text-slate-700">
                           <IconSpinner /> {label} 검색 중
                         </span>
                       ))}

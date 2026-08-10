@@ -1702,77 +1702,81 @@ export default function SearchPage() {
                 </button>
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-                <span className="mr-1 text-[11px] font-semibold text-slate-400">검색 범위</span>
-                {filterOptions.map(({ value, label, available }) => (
-                  <label
-                    key={value}
-                    className={`cursor-pointer ${available ? '' : 'pointer-events-none opacity-35'}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={filters.sources.includes(value)}
-                      onChange={() => available && toggleSource(value)}
-                      disabled={!available}
-                      className="peer sr-only"
-                    />
-                    <span className="flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-slate-300 peer-checked:border-blue-200 peer-checked:bg-blue-50 peer-checked:text-blue-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500">
-                      {filters.sources.includes(value) && <IconCheck />}
-                      {label}
-                    </span>
+              <div className="mt-3 border-t border-[var(--border)] pt-3">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">검색 범위</span>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {filterOptions.map(({ value, label, available }) => (
+                      <label
+                        key={value}
+                        className={`flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] ${available ? 'cursor-pointer hover:text-[var(--text-primary)]' : 'cursor-not-allowed opacity-40'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={filters.sources.includes(value)}
+                          onChange={() => available && toggleSource(value)}
+                          disabled={!available}
+                          className="h-4 w-4 rounded border-[var(--border)] accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <label className="ml-auto flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
+                    <span>기간</span>
+                    <select
+                      value={filters.dateRange}
+                      onChange={(event) => setFilters({ ...filters, dateRange: event.target.value as DateRange })}
+                      aria-label="검색 기간"
+                      className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] outline-none transition-colors hover:border-[var(--text-tertiary)] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      {dateOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   </label>
-                ))}
-                <span className="mx-1 h-4 w-px bg-slate-200" />
-                <select
-                  value={filters.dateRange}
-                  onChange={(event) => setFilters({ ...filters, dateRange: event.target.value as DateRange })}
-                  aria-label="검색 기간"
-                  className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-medium text-slate-600 outline-none transition-colors hover:border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                >
-                  {dateOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                </div>
               </div>
 
               {filters.sources.includes('drive') && (
-                <div className={`mt-2 space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-2.5 ${google.connected ? '' : 'pointer-events-none opacity-35'}`}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="mr-1 text-[11px] font-semibold text-emerald-700">Google 검색 위치</span>
-                    {googleSearchAreaOptions.map(({ value, label }) => (
-                      <label key={value} className="cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.googleSearchAreas.includes(value)}
-                          onChange={() => toggleGoogleSearchArea(value)}
-                          disabled={!google.connected}
-                          className="peer sr-only"
-                        />
-                        <span className="flex h-7 items-center gap-1.5 rounded-full border border-emerald-100 bg-white px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-emerald-200 peer-checked:border-emerald-300 peer-checked:bg-emerald-100 peer-checked:text-emerald-800 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500">
-                          {filters.googleSearchAreas.includes(value) && <IconCheck />}
+                <div className={`mt-3 grid gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:grid-cols-2 ${google.connected ? '' : 'pointer-events-none opacity-40'}`}>
+                  <fieldset>
+                    <legend className="mb-2 text-xs font-semibold text-[var(--text-primary)]">Google 검색 위치</legend>
+                    <div className="space-y-2">
+                      {googleSearchAreaOptions.map(({ value, label }) => (
+                        <label key={value} className="flex cursor-pointer items-start gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                          <input
+                            type="checkbox"
+                            checked={filters.googleSearchAreas.includes(value)}
+                            onChange={() => toggleGoogleSearchArea(value)}
+                            disabled={!google.connected}
+                            className="mt-px h-4 w-4 rounded border-[var(--border)] accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                          />
+                          <span>
+                            {label}
+                            {value === 'domain' && <span className="ml-1.5 font-normal text-[var(--text-tertiary)]">Workspace 계정 전용</span>}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend className="mb-2 text-xs font-semibold text-[var(--text-primary)]">파일 유형</legend>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {googleFileTypeOptions.map(({ value, label }) => (
+                        <label key={value} className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                          <input
+                            type="checkbox"
+                            checked={filters.googleFileTypes.includes(value)}
+                            onChange={() => toggleGoogleFileType(value)}
+                            disabled={!google.connected}
+                            className="h-4 w-4 rounded border-[var(--border)] accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                          />
                           {label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="mr-1 text-[11px] font-semibold text-emerald-700">파일 유형</span>
-                    {googleFileTypeOptions.map(({ value, label }) => (
-                      <label key={value} className="cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.googleFileTypes.includes(value)}
-                          onChange={() => toggleGoogleFileType(value)}
-                          disabled={!google.connected}
-                          className="peer sr-only"
-                        />
-                        <span className="flex h-7 items-center gap-1.5 rounded-full border border-emerald-100 bg-white px-2.5 text-[11px] font-medium text-slate-500 transition-all hover:border-emerald-200 peer-checked:border-emerald-300 peer-checked:bg-emerald-100 peer-checked:text-emerald-800 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500">
-                          {filters.googleFileTypes.includes(value) && <IconCheck />}
-                          {label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                 </div>
               )}
 

@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { formatMattermostUserName } from '@/lib/mattermost-user';
 
 interface MattermostPost {
   id: string;
@@ -62,10 +63,9 @@ export async function GET(request: NextRequest) {
   const messages = posts
     .map((post) => {
       const user = post.user_id ? userById.get(post.user_id) : undefined;
-      const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
       return {
         id: post.id,
-        author: fullName || user?.nickname || user?.username || '알 수 없는 사용자',
+        author: formatMattermostUserName(user) || '알 수 없는 사용자',
         message: post.message ?? '',
         date: new Date(post.create_at ?? 0).toISOString(),
       };

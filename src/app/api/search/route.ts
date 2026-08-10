@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { formatMattermostUserName } from '@/lib/mattermost-user';
 import type { SearchResult, SearchResponse, DateRange } from '@/lib/types';
 
 // ─── Text extraction ──────────────────────────────────────────────────────────
@@ -566,10 +567,7 @@ async function searchMattermost(
     }
   }
 
-  const getUserName = (user?: MattermostUser) => {
-    const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ');
-    return fullName || user?.nickname || user?.username || '';
-  };
+  const getUserName = (user?: MattermostUser) => formatMattermostUserName(user);
   const getChannelName = (channel?: MattermostChannel) => {
     if (!channel) return '알 수 없는 채널';
     if (channel.type === 'D' || channel.type === 'G') {

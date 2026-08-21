@@ -1861,7 +1861,7 @@ export default function SearchPage() {
                   value={excludedKeywords}
                   onChange={(event) => setExcludedKeywords(event.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="제외 키워드 입력 (쉼표로 구분)"
+                  placeholder="제외 키워드 입력 (쉼표로 구분) 예) MCCS, MDRM"
                   aria-label="제외 키워드"
                   className="h-9 flex-1 bg-transparent text-xs text-slate-600 outline-none placeholder:text-slate-400"
                 />

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { formatMattermostUserName } from '@/lib/mattermost-user';
-import type { SearchResult, SearchResponse, DateRange } from '@/lib/types';
+import type { SearchResult, SearchResponse, DateRange, MattermostConversationType } from '@/lib/types';
 
 // ─── Text extraction ──────────────────────────────────────────────────────────
 
@@ -568,6 +568,11 @@ async function searchMattermost(
   }
 
   const getUserName = (user?: MattermostUser) => formatMattermostUserName(user);
+  const getConversationType = (channel?: MattermostChannel): MattermostConversationType => {
+    if (channel?.type === 'D') return 'direct';
+    if (channel?.type === 'G') return 'group';
+    return 'channel';
+  };
   const getChannelName = (channel?: MattermostChannel) => {
     if (!channel) return '알 수 없는 채널';
     if (channel.type === 'D' || channel.type === 'G') {
@@ -596,8 +601,11 @@ async function searchMattermost(
       url: `${baseUrl}/${team.name}/pl/${post.id}`,
       author,
       date: new Date(post.create_at ?? 0).toISOString(),
+      teamId: team.id,
       team: team.display_name,
+      channelId: channel?.id ?? post.channel_id,
       channelName,
+      conversationType: getConversationType(channel),
     };
     return {
       result,
@@ -653,8 +661,11 @@ async function searchMattermost(
       url: file.post_id ? `${baseUrl}/${team.name}/pl/${file.post_id}` : `${baseUrl}/${team.name}`,
       author,
       date: new Date(file.create_at ?? 0).toISOString(),
+      teamId: team.id,
       team: team.display_name,
+      channelId: channel?.id ?? file.channel_id,
       channelName,
+      conversationType: getConversationType(channel),
       fileType: file.extension?.toUpperCase() || '파일',
       mimeType: file.mime_type,
       fileSize: file.size,

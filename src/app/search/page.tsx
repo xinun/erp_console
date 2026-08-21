@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type {
   SearchResult,
   SearchResponse,
@@ -9,16 +9,26 @@ import type {
   GoogleFileType,
   GoogleSearchArea,
   MattermostThreadMessage,
+  MattermostConversationType,
   DateRange,
 } from '@/lib/types';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useAtlassianAuth, type AtlassianConnection, type AtlassianProduct } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
+import Mp3Extractor from '@/components/Mp3Extractor';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DrawerType = 'atlassian' | 'google' | 'mattermost' | null;
 type ThemePreference = 'light' | 'dark' | 'system';
+
+interface MattermostConversationOption {
+  id: string;
+  label: string;
+  team: string;
+  type: MattermostConversationType;
+  count: number;
+}
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -1329,6 +1339,8 @@ export default function SearchPage() {
   const [resultSource, setResultSource] = useState<'all' | SearchSource>('all');
   const [resultLayout, setResultLayout] = useState<'list' | 'grid'>('list');
   const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'oldest'>('relevance');
+  const [selectedMattermostConversations, setSelectedMattermostConversations] = useState<string[]>([]);
+  const [mattermostConversationQuery, setMattermostConversationQuery] = useState('');
   const [pendingSearches, setPendingSearches] = useState<Array<{ id: string; label: string }>>([]);
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
@@ -1413,6 +1425,8 @@ export default function SearchPage() {
     setErrors({});
     setResults([]);
     setResultSource('all');
+    setSelectedMattermostConversations([]);
+    setMattermostConversationQuery('');
     setPreviewResult(null);
     setPreviewMattermostToken(null);
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
@@ -1535,10 +1549,46 @@ export default function SearchPage() {
   const resultSourceOptions = allResultSourceOptions.filter(
     (option) => option.value === 'all' || option.count > 0
   );
+  const mattermostConversationOptions = useMemo(() => {
+    const options = new Map<string, MattermostConversationOption>();
+    for (const result of results) {
+      if (result.source !== 'mattermost' || !result.channelId) continue;
+      const current = options.get(result.channelId);
+      if (current) {
+        current.count += 1;
+        continue;
+      }
+      options.set(result.channelId, {
+        id: result.channelId,
+        label: result.channelName || '알 수 없는 대화',
+        team: result.team || '',
+        type: result.conversationType || 'channel',
+        count: 1,
+      });
+    }
+    const typeOrder: Record<MattermostConversationType, number> = { channel: 0, direct: 1, group: 2 };
+    return [...options.values()].sort((a, b) =>
+      typeOrder[a.type] - typeOrder[b.type] || a.label.localeCompare(b.label, 'ko')
+    );
+  }, [results]);
+  const normalizedConversationQuery = mattermostConversationQuery.trim().toLocaleLowerCase();
+  const filteredMattermostConversationOptions = mattermostConversationOptions.filter((option) =>
+    !normalizedConversationQuery
+    || option.label.toLocaleLowerCase().includes(normalizedConversationQuery)
+    || option.team.toLocaleLowerCase().includes(normalizedConversationQuery)
+  );
+  const toggleMattermostConversation = (channelId: string) => {
+    setSelectedMattermostConversations((current) => current.includes(channelId)
+      ? current.filter((id) => id !== channelId)
+      : [...current, channelId]);
+  };
   const sourceResults = resultSource === 'all'
     ? results
     : results.filter((result) => result.source === resultSource);
-  const visibleResults = [...sourceResults].sort((a, b) => {
+  const conversationFilteredResults = resultSource === 'mattermost' && selectedMattermostConversations.length > 0
+    ? sourceResults.filter((result) => result.channelId && selectedMattermostConversations.includes(result.channelId))
+    : sourceResults;
+  const visibleResults = [...conversationFilteredResults].sort((a, b) => {
     if (sortMode === 'newest') return new Date(b.date).getTime() - new Date(a.date).getTime();
     if (sortMode === 'oldest') return new Date(a.date).getTime() - new Date(b.date).getTime();
     return (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
@@ -1582,6 +1632,7 @@ export default function SearchPage() {
           <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
         </div>
         <div className="flex items-center gap-2">
+          <Mp3Extractor />
           <div className="relative">
             <button
               type="button"
@@ -1889,6 +1940,76 @@ export default function SearchPage() {
                         </button>
                         </div>
                       </div>
+                    </div>
+                  )}
+                  {resultSource === 'mattermost' && mattermostConversationOptions.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 py-2">
+                      <span className="text-[11px] font-semibold text-[var(--text-secondary)]">대화</span>
+                      <details className="group relative">
+                        <summary className="flex h-8 cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-700 transition-colors hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/20">
+                          {selectedMattermostConversations.length > 0
+                            ? `${selectedMattermostConversations.length}개 선택`
+                            : '전체 대화'}
+                          <span className="text-slate-400 transition-transform group-open:rotate-90"><IconChevronRight /></span>
+                        </summary>
+                        <div className="absolute left-0 top-10 z-30 w-80 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                          <div className="relative mb-2">
+                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"><IconSearch size={13} /></span>
+                            <input
+                              type="search"
+                              value={mattermostConversationQuery}
+                              onChange={(event) => setMattermostConversationQuery(event.target.value)}
+                              placeholder="채널 또는 사람 검색"
+                              aria-label="Mattermost 대화 검색"
+                              className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20"
+                            />
+                          </div>
+                          <div className="max-h-72 overflow-y-auto">
+                            {(['channel', 'direct', 'group'] as MattermostConversationType[]).map((type) => {
+                              const options = filteredMattermostConversationOptions.filter((option) => option.type === type);
+                              if (options.length === 0) return null;
+                              const heading = type === 'channel' ? '채널' : type === 'direct' ? '개인 메시지' : '그룹 메시지';
+                              return (
+                                <fieldset key={type} className="mb-2 last:mb-0">
+                                  <legend className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{heading}</legend>
+                                  {options.map((option) => (
+                                    <label key={option.id} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 hover:bg-slate-50">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedMattermostConversations.includes(option.id)}
+                                        onChange={() => toggleMattermostConversation(option.id)}
+                                        className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                                      />
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-xs font-medium text-slate-700">{option.label}</span>
+                                        {option.team && <span className="block truncate text-[10px] text-slate-400">{option.team}</span>}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400">{option.count}</span>
+                                    </label>
+                                  ))}
+                                </fieldset>
+                              );
+                            })}
+                            {filteredMattermostConversationOptions.length === 0 && (
+                              <p className="px-2 py-6 text-center text-xs text-slate-400">일치하는 대화가 없습니다.</p>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                      {selectedMattermostConversations.length > 0 && (
+                        <>
+                          <span className="text-[11px] text-slate-500">
+                            Mattermost {counts.mattermost}건 중 {conversationFilteredResults.length}건
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMattermostConversations([])}
+                            className="text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+                          >
+                            초기화
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                   {pendingSearches.length > 0 && (

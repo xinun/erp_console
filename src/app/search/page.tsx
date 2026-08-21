@@ -22,7 +22,7 @@ import Mp3Extractor from '@/components/Mp3Extractor';
 type DrawerType = 'atlassian' | 'google' | 'mattermost' | null;
 type ThemePreference = 'light' | 'dark' | 'system';
 
-const MEET_RECORDER_DOWNLOAD_URL = 'https://github.com/xinun/recording/releases/download/v0.1.0/MeetRecorder.exe';
+const MEET_RECORDER_DOWNLOAD_URL = 'https://github.com/xinun/simple_recording_tool/releases/download/v0.1.0/MeetRecorder.exe';
 
 interface MattermostConversationOption {
   id: string;

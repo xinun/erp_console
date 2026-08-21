@@ -22,6 +22,8 @@ import Mp3Extractor from '@/components/Mp3Extractor';
 type DrawerType = 'atlassian' | 'google' | 'mattermost' | null;
 type ThemePreference = 'light' | 'dark' | 'system';
 
+const MEET_RECORDER_DOWNLOAD_URL = 'https://github.com/xinun/recording/releases/download/v0.1.0/MeetRecorder.exe';
+
 interface MattermostConversationOption {
   id: string;
   label: string;
@@ -158,6 +160,14 @@ function IconTheme() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconDownload() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1632,6 +1642,15 @@ export default function SearchPage() {
           <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href={MEET_RECORDER_DOWNLOAD_URL}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/30"
+            aria-label="Windows용 Meet 음성 녹음기 다운로드"
+            title="Windows용 Meet 음성 녹음기 v0.1.0 다운로드"
+          >
+            <IconDownload />
+            <span className="hidden sm:inline">녹음기 다운로드</span>
+          </a>
           <Mp3Extractor />
           <div className="relative">
             <button

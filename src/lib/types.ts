@@ -39,6 +39,8 @@ export interface SearchResult {
   date: string;
   matchType?: 'title' | 'content';
   relevanceScore?: number;
+  similarityScore?: number;
+  relatedMatch?: boolean;
   resultKind?: 'content' | 'attachment';
   // Jira specific
   key?: string;

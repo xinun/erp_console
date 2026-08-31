@@ -421,6 +421,11 @@ function ResultCard({
                   스레드 · 검색 일치 {result.threadMatchCount ?? 1}개
                 </span>
               )}
+              {result.relatedMatch && (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  연관 결과 · 유사도 {Math.round((result.similarityScore ?? 0) * 100)}%
+                </span>
+              )}
             </div>
             <span className="mb-1.5 block text-sm font-semibold leading-snug text-gray-900 transition-colors hover:text-slate-600">
               <HighlightedText text={result.title} query={query} />
@@ -1330,6 +1335,7 @@ export default function SearchPage() {
   const [resultLayout, setResultLayout] = useState<'list' | 'grid'>('list');
   const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'oldest'>('relevance');
   const [pendingSearches, setPendingSearches] = useState<Array<{ id: string; label: string }>>([]);
+  const [showingRelatedResults, setShowingRelatedResults] = useState(false);
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
@@ -1417,6 +1423,7 @@ export default function SearchPage() {
     setPreviewMattermostToken(null);
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
     setPendingSearches([]);
+    setShowingRelatedResults(false);
 
     try {
       const jiraSources = filters.sources.filter((s) => s === 'jira' || s === 'confluence');
@@ -1434,10 +1441,15 @@ export default function SearchPage() {
         return;
       }
 
-      const requestSearch = async (sources: SearchSource[], headers: Record<string, string>): Promise<SearchResponse> => {
+      const requestSearch = async (
+        sources: SearchSource[],
+        headers: Record<string, string>,
+        mode: 'normal' | 'related' = 'normal'
+      ): Promise<SearchResponse> => {
         const response = await fetch(`/api/search?${new URLSearchParams({
           q,
           sources: sources.join(','),
+          mode,
           googleFileTypes: filters.googleFileTypes.join(','),
           googleSearchAreas: filters.googleSearchAreas.join(','),
           dateRange: filters.dateRange,
@@ -1448,7 +1460,7 @@ export default function SearchPage() {
         return data as SearchResponse;
       };
 
-      const serverRequests: Array<{ id: string; label: string; request: Promise<SearchResponse> }> = [];
+      const serverRequests: Array<{ id: string; label: string; sources: SearchSource[]; headers: Record<string, string> }> = [];
       if (jiraSources.length > 0) {
         for (const connection of atlassianAuth.getConnections('workspace')) {
           const legacyConnection = !connection.products?.length;
@@ -1456,17 +1468,17 @@ export default function SearchPage() {
             const product = source === 'confluence' ? 'confluence' : 'jira';
             if (!legacyConnection && !connection.products?.includes(product)) continue;
             const label = `${connection.label} ${source === 'confluence' ? 'Confluence' : 'Jira'}`;
-            serverRequests.push({ id: `${connection.id}-${source}`, label, request: requestSearch([source], {
+            serverRequests.push({ id: `${connection.id}-${source}`, label, sources: [source], headers: {
               'x-atlassian-oauth-token': connection.accessToken,
               'x-atlassian-cloud-id': connection.resource.id,
               'x-atlassian-site-url': connection.resource.url,
-            }) });
+            } });
           }
         }
       }
       const googleToken = google.getToken();
       if (driveSources.length > 0 && googleToken) {
-        serverRequests.push({ id: 'google-drive', label: 'Google Drive', request: requestSearch(['drive'], { 'x-google-token': googleToken }) });
+        serverRequests.push({ id: 'google-drive', label: 'Google Drive', sources: ['drive'], headers: { 'x-google-token': googleToken } });
       }
 
       const mattermostToken = mattermost.getToken();
@@ -1474,15 +1486,20 @@ export default function SearchPage() {
         serverRequests.push({
           id: 'mattermost',
           label: 'Mattermost',
-          request: requestSearch(['mattermost'], { 'x-mattermost-token': mattermostToken }),
+          sources: ['mattermost'],
+          headers: { 'x-mattermost-token': mattermostToken },
         });
       }
 
       setPendingSearches(serverRequests.map(({ id, label }) => ({ id, label })));
+      let exactResultCount = 0;
+      let successfulRequestCount = 0;
       await Promise.allSettled(serverRequests.map(async (entry) => {
         try {
-          const data = await entry.request;
+          const data = await requestSearch(entry.sources, entry.headers);
           if (searchSequence !== searchSequenceRef.current) return;
+          successfulRequestCount += 1;
+          exactResultCount += data.results.length;
           setResults((current) => {
             const merged = new Map(current.map((result) => [`${result.source}:${result.id}:${result.url}`, result]));
             for (const result of data.results) merged.set(`${result.source}:${result.id}:${result.url}`, result);
@@ -1508,6 +1525,42 @@ export default function SearchPage() {
           }
         }
       }));
+
+      if (searchSequence === searchSequenceRef.current && exactResultCount === 0 && successfulRequestCount > 0) {
+        setPendingSearches(serverRequests.map(({ id, label }) => ({ id: `related-${id}`, label: `${label} 연관 검색` })));
+        let relatedResultCount = 0;
+        await Promise.allSettled(serverRequests.map(async (entry) => {
+          try {
+            const data = await requestSearch(entry.sources, entry.headers, 'related');
+            if (searchSequence !== searchSequenceRef.current) return;
+            relatedResultCount += data.results.length;
+            setResults((current) => {
+              const merged = new Map(current.map((result) => [`${result.source}:${result.id}:${result.url}`, result]));
+              for (const result of data.results) merged.set(`${result.source}:${result.id}:${result.url}`, result);
+              return [...merged.values()];
+            });
+            setCounts((current) => ({
+              jira: current.jira + data.counts.jira,
+              confluence: current.confluence + data.counts.confluence,
+              jsm: current.jsm + data.counts.jsm,
+              drive: current.drive + data.counts.drive,
+              mattermost: current.mattermost + data.counts.mattermost,
+            }));
+            setErrors((current) => ({ ...current, ...data.errors }));
+          } catch (error) {
+            if (searchSequence !== searchSequenceRef.current || (error instanceof DOMException && error.name === 'AbortError')) return;
+            setErrors((current) => ({
+              ...current,
+              [`related-${entry.id}`]: `${entry.label} 연관 검색: ${error instanceof Error ? error.message : '검색 실패'}`,
+            }));
+          } finally {
+            if (searchSequence === searchSequenceRef.current) {
+              setPendingSearches((current) => current.filter(({ id }) => id !== `related-${entry.id}`));
+            }
+          }
+        }));
+        if (searchSequence === searchSequenceRef.current && relatedResultCount > 0) setShowingRelatedResults(true);
+      }
     } catch (error) {
       setErrors({ global: error instanceof Error ? error.message : '서비스 연결에 실패했습니다.' });
     } finally {
@@ -1541,6 +1594,7 @@ export default function SearchPage() {
   const visibleResults = [...sourceResults].sort((a, b) => {
     if (sortMode === 'newest') return new Date(b.date).getTime() - new Date(a.date).getTime();
     if (sortMode === 'oldest') return new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (showingRelatedResults) return (b.similarityScore ?? 0) - (a.similarityScore ?? 0);
     return (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
   });
 
@@ -1830,6 +1884,11 @@ export default function SearchPage() {
                     검색 결과{' '}
                     <span className="font-semibold text-[var(--text-primary)]">{totalCount}건</span>
                   </p>
+                  {showingRelatedResults && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      정확히 일치하는 결과가 없어 유사한 단어가 포함된 연관 결과를 유사도순으로 표시합니다.
+                    </p>
+                  )}
                   {totalCount > 0 && (
                     <div className="mt-2 flex items-end justify-between gap-3">
                       <div className="flex min-w-0 gap-1 overflow-x-auto" role="tablist" aria-label="결과 서비스 필터">

@@ -84,6 +84,72 @@ function calculateRelevance(result: SearchResult, query: string): number {
   return score;
 }
 
+function normalizeSearchText(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function getSearchVariants(query: string): string[] {
+  const normalized = query.replace(/\s+/g, ' ').trim();
+  const compact = normalized.replace(/\s+/g, '');
+  const shouldCompact = /[가-힣]/.test(normalized) && /\s/.test(normalized);
+  return [...new Set([normalized, ...(shouldCompact ? [compact] : [])])].filter(Boolean);
+}
+
+function getRelatedSearchVariants(query: string): string[] {
+  const normalized = query.replace(/\s+/g, ' ').trim();
+  const compact = normalizeSearchText(normalized);
+  if (!/[가-힣]/.test(compact)) return [];
+  const terms = normalized.split(/\s+/).map(normalizeSearchText).filter((term) => term.length >= 2);
+  const bigrams = Array.from({ length: Math.max(0, compact.length - 1) }, (_, index) => compact.slice(index, index + 2));
+  return [...new Set([...terms, ...bigrams])].filter((term) => term && term !== compact).slice(0, 8);
+}
+
+function diceSimilarity(left: string, right: string): number {
+  const a = normalizeSearchText(left);
+  const b = normalizeSearchText(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+
+  const pairs = new Map<string, number>();
+  for (let index = 0; index < a.length - 1; index += 1) {
+    const pair = a.slice(index, index + 2);
+    pairs.set(pair, (pairs.get(pair) ?? 0) + 1);
+  }
+  let matches = 0;
+  for (let index = 0; index < b.length - 1; index += 1) {
+    const pair = b.slice(index, index + 2);
+    const count = pairs.get(pair) ?? 0;
+    if (count > 0) {
+      matches += 1;
+      pairs.set(pair, count - 1);
+    }
+  }
+  return (2 * matches) / (a.length + b.length - 2);
+}
+
+function calculateSimilarity(result: SearchResult, query: string): number {
+  const titleScore = diceSimilarity(result.title, query);
+  const bodyText = [result.snippet, result.content, result.author, result.project, result.space, result.channelName]
+    .filter(Boolean)
+    .join(' ');
+  const bodyScore = diceSimilarity(bodyText.slice(0, 1200), query);
+  return Math.max(titleScore, bodyScore * 0.72);
+}
+
+async function searchAcrossVariants(
+  variants: string[],
+  search: (variant: string) => Promise<SearchResult[]>
+): Promise<SearchResult[]> {
+  const settled = await Promise.allSettled(variants.map(search));
+  const groups = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  if (groups.length === 0) {
+    const failure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    throw failure?.reason instanceof Error ? failure.reason : new Error('검색 요청에 실패했습니다.');
+  }
+  return [...new Map(groups.flat().map((result) => [`${result.source}:${result.id}:${result.url}`, result])).values()];
+}
+
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function getJiraDateFilter(dateRange: DateRange): string {
@@ -676,6 +742,7 @@ async function searchMattermost(
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const q = searchParams.get('q')?.trim();
+  const searchMode = searchParams.get('mode') === 'related' ? 'related' : 'normal';
   const sourcesParam = searchParams.get('sources');
   const googleFileTypes = (searchParams.get('googleFileTypes') ?? 'docs,sheets,slides,files')
     .split(',')
@@ -716,6 +783,11 @@ export async function GET(request: NextRequest) {
   const counts = { jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 };
 
   const tasks: Promise<void>[] = [];
+  const searchVariants = searchMode === 'related' ? getRelatedSearchVariants(q) : getSearchVariants(q);
+
+  if (searchVariants.length === 0) {
+    return Response.json({ results: [], counts, errors });
+  }
 
   const needsAtlassianAuth = sources.includes('jira') || sources.includes('confluence') || sources.includes('jsm');
   let atlassianConfig: AtlassianAuthConfig | null = null;
@@ -745,7 +817,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('jira') && atlassianConfig) {
     tasks.push(
-      searchJira(q, atlassianConfig, dateRange)
+      searchAcrossVariants(searchVariants, (variant) => searchJira(variant, atlassianConfig, dateRange))
         .then((r) => { allResults.push(...r); counts.jira = r.length; })
         .catch((e: Error) => { errors.jira = e.message; })
     );
@@ -753,7 +825,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('jsm') && atlassianConfig) {
     tasks.push(
-      searchJira(q, atlassianConfig, dateRange, jiraProjectKey, 'jsm', jiraJqlFilter)
+      searchAcrossVariants(searchVariants, (variant) => searchJira(variant, atlassianConfig, dateRange, jiraProjectKey, 'jsm', jiraJqlFilter))
         .then((r) => { allResults.push(...r); counts.jsm = r.length; })
         .catch((e: Error) => { errors.jsm = e.message; })
     );
@@ -761,7 +833,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('confluence') && atlassianConfig) {
     tasks.push(
-      searchConfluence(q, atlassianConfig, dateRange)
+      searchAcrossVariants(searchVariants, (variant) => searchConfluence(variant, atlassianConfig, dateRange))
         .then((r) => { allResults.push(...r); counts.confluence = r.length; })
         .catch((e: Error) => { errors.confluence = e.message; })
     );
@@ -769,7 +841,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('drive') && googleToken) {
     tasks.push(
-      searchGoogleDrive(q, googleToken, dateRange, googleFileTypes, googleSearchAreas)
+      searchAcrossVariants(searchVariants, (variant) => searchGoogleDrive(variant, googleToken, dateRange, googleFileTypes, googleSearchAreas))
         .then((r) => { allResults.push(...r); counts.drive = r.length; })
         .catch((e: Error) => { errors.drive = e.message; })
     );
@@ -777,7 +849,7 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('mattermost') && mattermostToken) {
     tasks.push(
-      searchMattermost(q, mattermostToken, dateRange)
+      searchAcrossVariants(searchVariants, (variant) => searchMattermost(variant, mattermostToken, dateRange))
         .then((r) => { allResults.push(...r); counts.mattermost = r.length; })
         .catch((e: Error) => { errors.mattermost = e.message; })
     );
@@ -803,8 +875,16 @@ export async function GET(request: NextRequest) {
       ...result,
       snippet: getContextSnippet(result.snippet, q),
       relevanceScore: calculateRelevance(result, q),
+      ...(searchMode === 'related' ? {
+        similarityScore: calculateSimilarity(result, q),
+        relatedMatch: true,
+      } : {}),
     }))
-    .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
+    .filter((result) => searchMode !== 'related' || (result.similarityScore ?? 0) >= 0.18)
+    .sort((a, b) => searchMode === 'related'
+      ? (b.similarityScore ?? 0) - (a.similarityScore ?? 0)
+      : (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0))
+    .slice(0, searchMode === 'related' ? 30 : undefined);
   const filteredCounts = {
     jira: results.filter((result) => result.source === 'jira').length,
     confluence: results.filter((result) => result.source === 'confluence').length,

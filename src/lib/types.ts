@@ -12,6 +12,8 @@ export type GoogleFileType = 'docs' | 'sheets' | 'slides' | 'files';
 
 export type GoogleSearchArea = 'user' | 'sharedDrives' | 'domain';
 
+export type MattermostConversationType = 'channel' | 'direct' | 'group';
+
 export interface SearchComment {
   id: string;
   author: string;
@@ -61,8 +63,11 @@ export interface SearchResult {
   fileSize?: number;
   extension?: string;
   // Mattermost specific
+  teamId?: string;
   team?: string;
+  channelId?: string;
   channelName?: string;
+  conversationType?: MattermostConversationType;
   threadId?: string;
   threadMessages?: MattermostThreadMessage[];
   threadMatchCount?: number;

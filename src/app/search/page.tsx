@@ -1358,6 +1358,7 @@ export default function SearchPage() {
   const [mattermostConversationQuery, setMattermostConversationQuery] = useState('');
   const [pendingSearches, setPendingSearches] = useState<Array<{ id: string; label: string }>>([]);
   const [showingRelatedResults, setShowingRelatedResults] = useState(false);
+  const [relatedSearchAttempted, setRelatedSearchAttempted] = useState(false);
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
   const [filters, setFilters] = useState<SearchFilters>({
@@ -1418,8 +1419,8 @@ export default function SearchPage() {
     setFilters({ ...filters, googleSearchAreas: next });
   };
 
-  const handleSearch = useCallback(async () => {
-    const q = query.trim();
+  const handleSearch = useCallback(async (mode: 'normal' | 'related' = 'normal') => {
+    const q = mode === 'related' ? submittedQuery : query.trim();
     if (!q) return;
 
     const atlassianConnected = atlassianAuth.getConnections('workspace').length > 0;
@@ -1437,7 +1438,7 @@ export default function SearchPage() {
     const searchSequence = ++searchSequenceRef.current;
     setIsLoading(true);
     setHasSearched(true);
-    setSubmittedQuery(q);
+    if (mode === 'normal') setSubmittedQuery(q);
     setErrors({});
     setResults([]);
     setResultSource('all');
@@ -1448,6 +1449,7 @@ export default function SearchPage() {
     setCounts({ jira: 0, confluence: 0, jsm: 0, drive: 0, mattermost: 0 });
     setPendingSearches([]);
     setShowingRelatedResults(false);
+    setRelatedSearchAttempted(mode === 'related');
 
     try {
       const jiraSources = filters.sources.filter((s) => s === 'jira' || s === 'confluence');
@@ -1515,15 +1517,16 @@ export default function SearchPage() {
         });
       }
 
-      setPendingSearches(serverRequests.map(({ id, label }) => ({ id, label })));
-      let exactResultCount = 0;
-      let successfulRequestCount = 0;
+      setPendingSearches(serverRequests.map(({ id, label }) => ({
+        id,
+        label: mode === 'related' ? `${label} 유사 검색` : label,
+      })));
+      let resultCount = 0;
       await Promise.allSettled(serverRequests.map(async (entry) => {
         try {
-          const data = await requestSearch(entry.sources, entry.headers);
+          const data = await requestSearch(entry.sources, entry.headers, mode);
           if (searchSequence !== searchSequenceRef.current) return;
-          successfulRequestCount += 1;
-          exactResultCount += data.results.length;
+          resultCount += data.results.length;
           setResults((current) => {
             const merged = new Map(current.map((result) => [`${result.source}:${result.id}:${result.url}`, result]));
             for (const result of data.results) merged.set(`${result.source}:${result.id}:${result.url}`, result);
@@ -1549,51 +1552,18 @@ export default function SearchPage() {
           }
         }
       }));
-
-      if (searchSequence === searchSequenceRef.current && exactResultCount === 0 && successfulRequestCount > 0) {
-        setPendingSearches(serverRequests.map(({ id, label }) => ({ id: `related-${id}`, label: `${label} 연관 검색` })));
-        let relatedResultCount = 0;
-        await Promise.allSettled(serverRequests.map(async (entry) => {
-          try {
-            const data = await requestSearch(entry.sources, entry.headers, 'related');
-            if (searchSequence !== searchSequenceRef.current) return;
-            relatedResultCount += data.results.length;
-            setResults((current) => {
-              const merged = new Map(current.map((result) => [`${result.source}:${result.id}:${result.url}`, result]));
-              for (const result of data.results) merged.set(`${result.source}:${result.id}:${result.url}`, result);
-              return [...merged.values()];
-            });
-            setCounts((current) => ({
-              jira: current.jira + data.counts.jira,
-              confluence: current.confluence + data.counts.confluence,
-              jsm: current.jsm + data.counts.jsm,
-              drive: current.drive + data.counts.drive,
-              mattermost: current.mattermost + data.counts.mattermost,
-            }));
-            setErrors((current) => ({ ...current, ...data.errors }));
-          } catch (error) {
-            if (searchSequence !== searchSequenceRef.current || (error instanceof DOMException && error.name === 'AbortError')) return;
-            setErrors((current) => ({
-              ...current,
-              [`related-${entry.id}`]: `${entry.label} 연관 검색: ${error instanceof Error ? error.message : '검색 실패'}`,
-            }));
-          } finally {
-            if (searchSequence === searchSequenceRef.current) {
-              setPendingSearches((current) => current.filter(({ id }) => id !== `related-${entry.id}`));
-            }
-          }
-        }));
-        if (searchSequence === searchSequenceRef.current && relatedResultCount > 0) setShowingRelatedResults(true);
+      if (searchSequence === searchSequenceRef.current && mode === 'related' && resultCount > 0) {
+        setShowingRelatedResults(true);
       }
     } catch (error) {
       setErrors({ global: error instanceof Error ? error.message : '서비스 연결에 실패했습니다.' });
     } finally {
       if (searchSequence === searchSequenceRef.current) setIsLoading(false);
     }
-  }, [query, excludedKeywords, filters, google, atlassianAuth, mattermost]);
+  }, [query, submittedQuery, excludedKeywords, filters, google, atlassianAuth, mattermost]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSearch();
+    if (e.key === 'Enter') void handleSearch('normal');
   };
 
   const handlePreview = (result: SearchResult) => {
@@ -1817,7 +1787,7 @@ export default function SearchPage() {
                   />
                 </div>
                 <button
-                  onClick={handleSearch}
+                  onClick={() => void handleSearch('normal')}
                   disabled={isLoading || !query.trim()}
                   className="flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -2130,6 +2100,18 @@ export default function SearchPage() {
                     <div className="text-center py-16">
                       <p className="text-sm font-medium text-gray-500">검색 결과가 없습니다.</p>
                       <p className="text-xs text-gray-400 mt-1">다른 검색어로 다시 시도해보세요.</p>
+                      {!relatedSearchAttempted && /[가-힣]/.test(submittedQuery) && (
+                        <button
+                          type="button"
+                          onClick={() => void handleSearch('related')}
+                          className="mt-4 inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/30"
+                        >
+                          유사 검색어로 검색하기
+                        </button>
+                      )}
+                      {relatedSearchAttempted && (
+                        <p className="mt-3 text-xs text-gray-400">유사한 검색 결과도 찾지 못했습니다.</p>
+                      )}
                     </div>
                   )
                 )}

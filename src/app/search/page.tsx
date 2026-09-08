@@ -210,10 +210,9 @@ function SourceBadge({ source, fileType }: { source: SearchSource; fileType?: st
   const s = styles[source];
   return (
     <span
-      className="inline-block text-xs font-semibold px-2 py-0.5 rounded"
-      style={{ background: s.bg, color: s.text, border: `1px solid ${s.border}` }}
+      className="source-label inline-flex items-center gap-1.5 text-xs font-medium"
     >
-      {s.label}
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.text }} />{s.label}
     </span>
   );
 }
@@ -412,12 +411,13 @@ function ResultCard({
       tabIndex={0}
       onClick={openPreview}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           openPreview();
         }
       }}
-      className="group h-full cursor-pointer rounded-xl border border-slate-200 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
+      className="result-row group h-full cursor-pointer border-b border-[var(--border)] py-5 px-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
       aria-label={`${result.title} 미리보기`}
       data-result-source={result.source}
     >
@@ -447,7 +447,7 @@ function ResultCard({
                 </span>
               )}
             </div>
-            <span className="mb-1.5 block text-sm font-semibold leading-snug text-gray-900 transition-colors hover:text-slate-600">
+            <span className="mb-2 block text-base font-semibold leading-snug text-gray-900 transition-colors hover:text-slate-600">
               <HighlightedText text={result.title} query={query} />
             </span>
             {result.source === 'mattermost' && visibleThreadMessages ? (
@@ -458,7 +458,7 @@ function ResultCard({
                       <span className="font-semibold text-slate-600">{message.author}</span>
                       <span className="text-slate-400">{formatDate(message.date)}</span>
                     </span>
-                    <span className="line-clamp-2 block text-xs leading-relaxed text-slate-500">
+                    <span className="line-clamp-2 block text-sm leading-relaxed text-slate-500">
                       <HighlightedText text={message.message} query={query} />
                     </span>
                   </span>
@@ -478,7 +478,7 @@ function ResultCard({
                 )}
               </span>
             ) : result.snippet && (
-              <span className="line-clamp-2 block text-xs leading-relaxed text-gray-500">
+              <span className="line-clamp-2 block text-sm leading-relaxed text-gray-500">
                 <HighlightedText text={result.snippet} query={query} />
               </span>
             )}
@@ -528,6 +528,28 @@ function ResultPreview({
   const [threadMessages, setThreadMessages] = useState<MattermostThreadMessage[]>(result.threadMessages ?? []);
   const [threadLoading, setThreadLoading] = useState(Boolean(isMattermost && result.threadId && mattermostToken));
   const [threadError, setThreadError] = useState('');
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const panel = panelRef.current;
+    panel?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Tab' || !panel) return;
+      const elements = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex="0"]')).filter(element => element.getClientRects().length > 0);
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => { document.removeEventListener('keydown', handleKey); previousFocus?.focus(); };
+  }, [onClose]);
 
   useEffect(() => {
     if (!isMattermost || !result.threadId || !mattermostToken) return;
@@ -553,18 +575,20 @@ function ResultPreview({
   }, [isMattermost, mattermostToken, result.threadId]);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-5">
+    <div className="preview-overlay fixed inset-0 z-[70] flex items-center justify-center p-3 lg:justify-end lg:p-0">
       <button
         type="button"
         aria-label="미리보기 닫기"
         onClick={onClose}
-        className="absolute inset-0 bg-slate-950/35 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-slate-950/20"
       />
       <section
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="result-preview-title"
-        className={`relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${isJira ? 'max-w-5xl' : 'max-w-2xl'}`}
+        className="preview-panel relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl lg:h-full lg:max-h-full lg:rounded-none"
       >
         <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0 flex-1">
@@ -1092,7 +1116,7 @@ function Drawer({ open, type, atlassianAuth, google, mattermost, onClose }: Draw
       <div
         className="fixed top-0 right-0 h-full bg-white border-l border-gray-200 shadow-xl z-50 flex flex-col"
         style={{
-          width: '400px',
+          width: 'min(400px, 100vw)',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 0.28s ease-in-out',
         }}
@@ -1340,6 +1364,8 @@ export default function SearchPage() {
   const mattermost = useMattermostAuth();
 
   const [activeDrawer, setActiveDrawer] = useState<DrawerType>(null);
+  const [showConnections, setShowConnections] = useState(false);
+  const [submittedConditions, setSubmittedConditions] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>('system');
@@ -1361,6 +1387,10 @@ export default function SearchPage() {
   const [relatedSearchAttempted, setRelatedSearchAttempted] = useState(false);
   const [previewResult, setPreviewResult] = useState<SearchResult | null>(null);
   const [previewMattermostToken, setPreviewMattermostToken] = useState<string | null>(null);
+  const closePreview = useCallback(() => {
+    setPreviewResult(null);
+    setPreviewMattermostToken(null);
+  }, []);
   const [filters, setFilters] = useState<SearchFilters>({
     sources: ['jira', 'confluence', 'drive', 'mattermost'],
     googleFileTypes: ['docs', 'sheets', 'slides', 'files'],
@@ -1371,6 +1401,18 @@ export default function SearchPage() {
   const mainScrollRef = useRef<HTMLElement>(null);
   const searchSequenceRef = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const dismissPanels = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setShowConnections(false);
+      setShowProfile(false);
+      setShowThemeMenu(false);
+      setActiveDrawer(null);
+    };
+    document.addEventListener('keydown', dismissPanels);
+    return () => document.removeEventListener('keydown', dismissPanels);
+  }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -1427,7 +1469,7 @@ export default function SearchPage() {
     const mattermostConnected = mattermost.connected;
     const hasAnyConnection = atlassianConnected || google.connected || mattermostConnected;
     if (!hasAnyConnection) {
-      setErrors({ global: '검색할 서비스가 없습니다. 왼쪽에서 서비스를 연결해주세요.' });
+      setErrors({ global: '검색할 서비스가 없습니다. 연결 관리에서 서비스를 연결해주세요.' });
       setHasSearched(true);
       return;
     }
@@ -1438,6 +1480,7 @@ export default function SearchPage() {
     const searchSequence = ++searchSequenceRef.current;
     setIsLoading(true);
     setHasSearched(true);
+    setSubmittedConditions(JSON.stringify({ filters, excludedKeywords }));
     if (mode === 'normal') setSubmittedQuery(q);
     setErrors({});
     setResults([]);
@@ -1656,7 +1699,7 @@ export default function SearchPage() {
   ];
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="search-workspace h-full flex flex-col">
       {/* Header */}
       <header className="h-14 flex-shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5">
         <div className="flex items-center gap-2">
@@ -1666,6 +1709,8 @@ export default function SearchPage() {
           <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" className="utility-button" aria-expanded={showConnections} aria-controls="connection-manager" onClick={() => setShowConnections(!showConnections)}>연결 관리<span className="hidden sm:inline"> · {filterOptions.filter(option => option.available).length}개 연결됨</span></button>
+          <details className="relative tools-menu"><summary className="utility-button cursor-pointer">도구</summary><div className="tools-popover">
           <a
             href={MEET_RECORDER_DOWNLOAD_URL}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/30"
@@ -1673,9 +1718,10 @@ export default function SearchPage() {
             title="Windows용 Meet 음성 녹음기 v0.1.0 다운로드"
           >
             <IconDownload />
-            <span className="hidden sm:inline">녹음기 다운로드</span>
+            <span>녹음기 다운로드</span>
           </a>
           <Mp3Extractor />
+          </div></details>
           <div className="relative">
             <button
               type="button"
@@ -1758,19 +1804,20 @@ export default function SearchPage() {
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar
+        {showConnections && <div id="connection-manager" className="connection-manager"><div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]"><span className="font-semibold">서비스 연결</span><button type="button" className="utility-button" onClick={() => setShowConnections(false)}>닫기</button></div><Sidebar
           atlassianConnected={atlassianConnected}
           workspaceConnections={atlassianAuth.getConnections('workspace')}
           googleConnected={google.connected}
           mattermostConnected={mattermostConnected}
-          onServiceClick={setActiveDrawer}
-        />
+          onServiceClick={(type) => { setShowConnections(false); setActiveDrawer(type); }}
+        /></div>}
 
         {/* Main */}
         <main ref={mainScrollRef} className="theme-page-background relative flex-1 overflow-y-auto bg-[#F4F5F7]">
-          <div className="max-w-3xl mx-auto px-6 py-6">
+          <div className="search-content mx-auto px-5 py-8 sm:px-8">
             {/* Search and filters */}
-            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            {hasAnyConnection && <div className="search-controls mb-8">
+              <h1 className="mb-4 text-xl font-semibold tracking-tight">통합검색</h1>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-primary)]">
@@ -1782,7 +1829,8 @@ export default function SearchPage() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="검색어를 입력하세요"
+                    aria-label="통합 검색어"
+                    placeholder="문서, 이슈, 대화 검색"
                     className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-sm placeholder-slate-400 transition-shadow focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
                   />
                 </div>
@@ -1798,7 +1846,7 @@ export default function SearchPage() {
 
               <div className="mt-3 border-t border-[var(--border)] pt-3">
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                  <span className="text-xs font-semibold text-[var(--text-primary)]">검색 범위</span>
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">검색 대상</span>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     {filterOptions.map(({ value, label, available }) => (
                       <label
@@ -1832,7 +1880,8 @@ export default function SearchPage() {
                 </div>
               </div>
 
-              {filters.sources.includes('drive') && (
+              <details className="advanced-filters mt-3"><summary className="cursor-pointer py-2 text-sm text-[var(--text-secondary)]">상세 필터<span className="ml-2 text-xs">{excludedKeywords || filters.googleFileTypes.length !== 4 || filters.googleSearchAreas.length !== 3 ? "조건 설정됨" : "파일 유형 · 검색 위치 · 제외어"}</span></summary>
+              {filters.sources.includes('drive') && google.connected && (
                 <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${google.connected ? '' : 'pointer-events-none opacity-40'}`}>
                   <fieldset className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                     <legend className="px-1 text-xs font-semibold text-[var(--text-primary)]">Google 검색 위치</legend>
@@ -1899,7 +1948,9 @@ export default function SearchPage() {
                   </button>
                 )}
               </div>
-            </div>
+              </details>
+              {hasSearched && submittedConditions !== JSON.stringify({ filters, excludedKeywords }) && <p className="mt-3 text-sm text-[var(--text-secondary)]" role="status">검색 조건이 변경되었습니다. 검색 버튼을 눌러 적용하세요.</p>}
+            </div>}
 
             {/* Loading skeleton */}
             {isLoading && results.length === 0 && (
@@ -2085,7 +2136,7 @@ export default function SearchPage() {
                 )}
 
                 {visibleResults.length > 0 ? (
-                  <div className={resultLayout === 'grid' ? 'grid gap-3 lg:grid-cols-2' : 'space-y-2'}>
+                  <div className={resultLayout === 'grid' ? 'grid gap-3 lg:grid-cols-2' : 'result-list'}>
                     {visibleResults.map((result) => (
                       <ResultCard
                         key={`${result.source}-${result.id}`}
@@ -2120,19 +2171,35 @@ export default function SearchPage() {
 
             {/* Initial state */}
             {!hasSearched && !isLoading && (
-              <div className="text-center py-20">
+              <div className="empty-state py-16 sm:py-24">
                 {hasAnyConnection ? (
                   <p className="text-sm text-gray-400">
-                    검색어를 입력하고 Enter를 누르세요.
+                    찾으려는 문서 제목이나 대화 속 단어를 입력하세요.
                   </p>
                 ) : (
                   <div>
                     <p className="text-sm font-medium text-gray-500 mb-1">
-                      연결된 서비스가 없습니다.
+                      검색할 서비스를 연결하세요.
                     </p>
                     <p className="text-xs text-gray-400">
-                      왼쪽 패널에서 Jira 또는 Google 계정을 연결해주세요.
+                      Jira 이슈부터 문서와 대화까지, 한 곳에서 찾아보세요.
                     </p>
+                    <div className="onboarding-services mt-8">
+                      {([
+                        { type: 'atlassian', title: 'Jira · Confluence', description: '이슈와 위키 문서' },
+                        { type: 'google', title: 'Google Drive', description: '문서와 공유 파일' },
+                        { type: 'mattermost', title: 'Mattermost', description: '채널과 대화' },
+                      ] as const).map(service => (
+                        <button key={service.type} type="button" className="onboarding-service" onClick={() => setActiveDrawer(service.type)}>
+                          <span>
+                            <span className="block text-sm font-semibold">{service.title}</span>
+                            <span className="mt-1 block text-xs text-[var(--text-secondary)]">{service.description}</span>
+                          </span>
+                          <span className="text-xs">연결 →</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-5 text-xs text-[var(--text-secondary)]">연결 정보는 현재 브라우저에 저장됩니다.</p>
                   </div>
                 )}
               </div>
@@ -2156,10 +2223,7 @@ export default function SearchPage() {
           result={previewResult}
           query={submittedQuery}
           mattermostToken={previewMattermostToken}
-          onClose={() => {
-            setPreviewResult(null);
-            setPreviewMattermostToken(null);
-          }}
+          onClose={closePreview}
         />
       )}
     </div>

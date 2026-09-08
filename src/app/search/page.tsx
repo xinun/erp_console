@@ -1706,7 +1706,7 @@ export default function SearchPage() {
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900">
             <IconSearch size={13} className="text-white" />
           </div>
-          <span className="text-sm font-semibold text-gray-800">사내 통합검색</span>
+          <span className="text-sm font-semibold text-gray-800">검색 콘솔</span>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="utility-button" aria-expanded={showConnections} aria-controls="connection-manager" onClick={() => setShowConnections(!showConnections)}>연결 관리<span className="hidden sm:inline"> · {filterOptions.filter(option => option.available).length}개 연결됨</span></button>

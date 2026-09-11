@@ -21,7 +21,7 @@ ERP Console은 여러 사내 서비스의 검색 결과를 하나의 화면에 �
 
 주요 화면은 `src/app/search/page.tsx`, 통합 검색 API는 `src/app/api/search/route.ts`에 있다.
 
-우측 상단의 MP3 추출 도구는 `src/components/Mp3Extractor.tsx`에 있다. 영상 파일은 서버에 업로드하지 않고 브라우저의 ffmpeg.wasm에서 음성 트랙을 MP3로 변환하며, 변환 코어는 사용자가 도구를 실행할 때만 지연 로딩한다.
+우측 상단 도구 메뉴에서 Windows용 Meet 음성 녹음기를 내려받을 수 있다.
 
 ## 검색 흐름
 

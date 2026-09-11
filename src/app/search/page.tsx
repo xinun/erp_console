@@ -15,7 +15,6 @@ import type {
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useAtlassianAuth, type AtlassianConnection, type AtlassianProduct } from '@/hooks/useAtlassianAuth';
 import { useMattermostAuth } from '@/hooks/useMattermostAuth';
-import Mp3Extractor from '@/components/Mp3Extractor';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1720,7 +1719,6 @@ export default function SearchPage() {
             <IconDownload />
             <span>녹음기 다운로드</span>
           </a>
-          <Mp3Extractor />
           </div></details>
           <div className="relative">
             <button

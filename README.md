@@ -2,6 +2,9 @@
 
 Jira, Confluence, Google Workspace(Drive, Docs 등)의 데이터를 한 곳에서 통합하여 검색할 수 있는 사내 통합검색 시스템입니다.
 
+사이트 주소: https://erp-console.vercel.app/search
+
+
 ## 기능
 - **Atlassian 연동**: Jira 이슈와 Confluence 페이지 통합 검색 (OAuth 2.0 지원)
 - **Google Workspace 연동**: Google Drive, Docs, Sheets, Slides 파일 검색 (OAuth 2.0 지원)

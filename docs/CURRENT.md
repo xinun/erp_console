@@ -1,6 +1,6 @@
 # 현재 작업 상태
 
-마지막 갱신: 2026-09-28
+마지막 갱신: 2026-09-30
 
 ## 현재 기준
 
@@ -9,6 +9,28 @@
 - 운영 주소: `https://erp-console.vercel.app/search`
 
 ## 최근 완료
+
+- 2026-09-30 사용자 ClusterCatalogTemplate 예시에 맞춰 카탈로그 종류를 ClusterCatalogTemplate으로 변경하고 metadata.name=ai-ollama-810d1, labels.packageName=ai-ollama, labels.version="3.1.0", category=ai 반영. 생성기도 동기화하고 클러스터 범위 리소스라 catalog-namespace 옵션 제거. 예시의 spec 구조에 맞춰 Catalog용 pipelineTemplate/terminateStrategy 제외. 서버 관리 필드 uid/selfLink/resourceVersion/generation/creationTimestamp는 복사하지 않았다. 메타데이터와 내부 11개 리소스 YAML 검사 및 diff 검사 통과. 메타데이터 변경으로 lint/build 재실행 생략, 실제 웹훅 등록 미검증.
+
+- 2026-09-30 카탈로그 category annotation을 ai로 변경하고 생성기에도 반영했다. YAML annotation 검사와 diff 검사 통과. 메타데이터 변경으로 lint/build 재실행 생략.
+
+- 2026-09-30 카탈로그 주석 제거: YAML 헤더와 내장 Python 코드의 주석을 제거하고 원본/생성기에 반영했다. 주석 부재 및 내부 리소스 11개 YAML 파싱, diff 검사 통과. 주석만 변경하여 lint/build 재실행 생략. 클러스터 변경 없음.
+
+- 2026-09-30 명칭 정리: 사용자 첨부와 로컬 YAML은 Catalog metadata.name만 달랐다. deploy/ai_k8s의 카탈로그명과 resourceValues/template 연결 이름을 ai-ollama로 통일하고 표시명은 AI / Ollama로 변경했다. 생성기·일반 Kubernetes 예제·가이드에서도 internal 접두어를 제거(일반 예제 namespace ai, 앱 ai-ollama). YAML 파싱/리소스 연결 이름/selector 및 diff 검사 통과. 명칭만 수정해 lint/build 재실행 생략. 실행 중인 클러스터 리소스/Secret/토큰은 변경하지 않았다.
+
+- 2026-09-30 UI namespace 불일치: metadata.namespace 외에 deployStrategy.clusters.namespaces에 proc이 남아 실제 대상이 고정된 것을 확인. 생성기의 --deploy-namespace를 필수로 변경하고 제공 YAML은 사용자가 선택한 ai로 생성했다. UI namespace 자동 상속은 미확인으로 주장하지 않는다. CPU 요청 기본값도 실제 성공한 1로 조정했다. YAML 대상 ai, 리소스 namespace 생략, CPU 기본값, diff 검사 통과. 템플릿 설정 변경이라 lint/build 재실행 생략. 기존 proc 리소스는 조작하지 않았다. 사용자 로그에서 proc Pod가 worker2에 Scheduled, check-pvc 이후 prepare-model 시작을 확인했지만 모델 다운로드 완료/추론은 미확인.
+
+
+- 2026-09-30 Secret 자동 준비: 통합 카탈로그 Job이 지정 Secret을 조회하고 없으면 256비트 랜덤 토큰을 생성한다. 기존 토큰은 검증만 하고 덮어쓰지 않으며 생성 경쟁은 409 재조회로 처리한다. 토큰은 로그에 출력하지 않는다. 준비 Role에 지정 Secret get / namespace Secret create만 추가하고 AI 검사 계정에는 Secret API 권한을 부여하지 않았다. 기본 StorageClass는 사용자 확인값 accordion-storage, storageRevision은 2로 변경했다. 기존 asd 업데이트 시 실제 배포 입력 revision도 2로 올려야 한다. 공유 배포는 namespace 또는 PVC/Secret 이름을 분리하고 클러스터/namespace/registry/StorageClass를 환경에 맞춰 설정한다. 일반 Kubernetes YAML의 수동 준비 방식은 유지한다. README 재배포·보존·토큰 회수 절차 갱신. Secret 신규/재사용/409/403/잘못된 토큰/삭제 중 6가지 임시 검사, YAML/RBAC/내장 소스 일치, lint/build/diff 검사 통과. test_ 파일은 재생성하지 않았다. 실제 Secret 생성 및 재배포는 아직 클러스터에서 검증하지 않았다.
+
+- 2026-09-30: 카탈로그를 `deploy/ai_k8s/ollama-catalog.yaml` 하나로 통합했다. PVC 준비 Job은 조회 후 없으면 생성하고 기존 PVC는 변경하지 않는다. AI Pod 첫 initContainer가 조건을 다시 검사해 실패 시 모델 시작을 차단한다. Job 생성 권한과 Pod 조회 권한을 분리하고 토큰은 검사 컨테이너만 마운트한다. storageRevision 증가로 Job 재실행/불변 필드 문제를 처리한다. 이전 로컬 new-pvc 파일은 제거했으나 서버 카탈로그/리소스는 변경하지 않았다. 일반 Kubernetes YAML은 별도 PVC 준비 방식 유지. PVC는 ownerReferences 없이 생성하며 아코디언 자체 삭제 정책 및 기존 배포 전환 시 관리 대상 해제는 실환경 확인 필요.
+
+
+- 일반 Kubernetes용 `deploy/ai_k8s/kubernetes/` YAML(namespace, PVC, ConfigMap/Deployment/Service)과 생성기·배포 가이드를 추가했다. 현재 파일 위치인 `deploy/ai_k8s`를 유지했다. API 키 Secret은 별도 생성하며 앱 삭제 시 PVC를 보존하도록 매니페스트를 분리했다. 사용자가 Accordion 카탈로그 생성 성공을 확인했으며 실제 모델 배포는 미검증이다.
+
+- 카탈로그 등록에서 `empty resource spec` webhook 거부가 보고되어 내부 리소스 표현을 JSON에서 예시와 같은 블록 YAML로 수정했다. 일반 YAML 파싱 성공만으로 Accordion 호환성을 보장할 수 없음을 확인했다. 실제 webhook 재등록은 사용자 환경에서 확인이 필요하다.
+
+- 2026-09-29: `deploy/accordion/ollama-catalog.yaml`에 Ollama·Bearer 게이트웨이 단일 Pod 카탈로그 초안을 추가했다. 모델명 입력, 기존 PVC·Secret 참조, 모델 준비 initContainer, 내부 Service를 포함한다. 생성기·인증/입력 제한 테스트·설치 안내를 함께 추가했다. 실제 Accordion 등록/렌더링, 이미지 pull, PVC 및 서버 추론은 미검증이며 운영 배포하지 않았다. 개인별 토큰 발급 UI·Mattermost 검색은 포함하지 않는다.
 
 - 2026-09-28: [사내 AI 검색 API 설계 계획](INTERNAL_AI_SEARCH_PLAN.md)을 작성했다. Vercel 일반 검색을 유지하면서 AI 검색만 브라우저에서 사내 API로 직접 호출하는 구조, Qwen3 활용, 사용자별 조회 권한, API 계약, 독립 빌드·배포를 정리했다. 설계 초안이며 구현·서버 설정·배포는 수행하지 않았다.
 
@@ -86,6 +108,22 @@
 - Atlassian 연결 정보와 토큰은 브라우저 `localStorage`에 저장된다.
 
 ## 검증 상태
+
+- 2026-09-30 정규식 재발 대응: 일반 그룹으로 변경한 뒤에도 BuildRequest가 invalid regex pattern으로 거부되어 앞선 그룹 문법 원인 추정은 확정할 수 없다. 생성기 valueschema의 pattern을 모두 제거하고 required/type/minLength는 유지했다. PVC 준비 코드의 이름/용량/기존 PVC 조건 검증은 유지한다. 플랫폼 입력 단계의 정규식 검증은 더 이상 제공하지 않는다. YAML 파싱 및 스키마 pattern 부재, PVC 정상/클래스 불일치/용량 부족 3가지 직접 검사, git diff --check 통과. 기존 test_prepare_pvc.py는 사용자 정리로 현재 없어 테스트 파일 실행은 불가했으며 재생성하지 않았다. 웹 런타임 변경이 없어 lint/build 재실행 생략. 실제 웹훅 재등록/배포는 미검증.
+
+- 2026-09-30 BuildRequest 정규식 오류 대응: valueschema의 storageClass/pvcName 패턴에서 비캡처 그룹 `(?:...)`를 일반 그룹 `(...)`으로 바꾸고 카탈로그를 재생성했다. 웹훅 정규식 엔진과의 호환성 문제로 추정하며 실제 엔진은 확인하지 못했다. 모든 스키마 패턴 컴파일 및 이름 허용/거부 사례, YAML 파싱, git diff --check 통과. 스키마만 수정하여 lint/build는 재실행하지 않았다. 실제 BuildRequest 재시도는 미검증이며 storageClass 기본 CHANGE-ME는 실제 클래스 이름으로 교체해야 한다.
+
+- 2026-09-30 namespace 오류 대응: Catalog metadata.namespace의 proc 고정을 제거하여 등록 요청 namespace를 따르도록 했다. 생성기에 --catalog-namespace(선택), --deploy-namespace(기본 proc) 추가. 실제 사용자 namespace 답변 전이므로 배포 대상 기본값 proc은 유지하며 README에 변경 방법을 명시했다. Catalog와 내부 11개 리소스 namespace 생략 및 YAML 파싱, git diff --check 통과. 생성기/문서의 제한적 변경으로 lint/build는 재실행하지 않았고 위 통합 구현 검증 결과를 유지한다. 실환경 재등록은 미검증. test_ 파일 2개는 개발 검증용이며 배포 참조가 없어 삭제 가능함을 안내하고 파일 자체는 보존했다.
+
+- 2026-09-30 통합 카탈로그: 11개 리소스 YAML 렌더링, Pod 볼륨/ConfigMap/ServiceAccount 참조 및 내장 Python 소스 일치 검사 통과. PVC 테스트 6개(재사용 무변경, 신규 생성/409 경쟁, 403 처리, 조회 전용, 불일치 거부, 용량 비교), 게이트웨이 테스트 4개 통과. `npm run lint`, `npm run build`, `git diff --check` 통과. Accordion webhook/RoleBinding 허용, 실제 PVC 생성/보존 및 모델 추론은 클러스터 접근이 없어 미검증. 아래 9월 29일 두 카탈로그 기록은 통합 이전 이력이다.
+
+- PVC 변경 후 `npm run lint`, `npm run build`, `git diff --check`도 통과했다. 웹 런타임 코드는 변경하지 않았다.
+
+- 2026-09-29 PVC 검토: `deploy/ai_k8s/ollama-catalog.yaml`은 기존 PVC 참조만 하며 없으면 Pending 상태가 된다. `ollama-catalog-new-pvc.yaml`을 생성기에 추가해 신규 설치 시 배포 이름 기반 PVC를 함께 생성하도록 했다. 실제 StorageClass 입력 필수, 기본 20Gi, Secret 별도 준비. 신규 버전은 Cascade 삭제에 PVC가 포함될 수 있어 보존이 필요하면 별도 PVC + 기존 버전을 사용한다. 두 카탈로그 로컬 렌더링/리소스 참조/selector/내장 gateway 소스 일치, 일반 Kubernetes YAML 파싱, 게이트웨이 테스트 4개 통과. 신규 카탈로그 Accordion 등록과 서버 측 dry-run, 스토리지 할당 및 추론은 클러스터 접근이 없어 미검증이다.
+
+- 일반 Kubernetes 버전: 표준 YAML 5개 리소스 파싱, 미치환 템플릿 없음, PVC 참조·Service selector·namespace·게이트웨이 코드 일치 검사, 게이트웨이 테스트 4개, `npm run lint`, `npm run build`, `git diff --check` 통과. 대상 클러스터에 연결하여 server-side dry-run/배포/이미지 pull/추론을 수행하지 않았으며 운영 적용 전 가이드의 검증 명령 실행이 필요하다.
+
+- 2026-09-29: 카탈로그 생성, 게이트웨이 테스트 4개(HTTP 401/404/429, 토큰 교체, 모델·예산 강제, 입력 제한), Catalog YAML 및 내부 리소스 3개 파싱, `npm run lint`, `npm run build`, `git diff --check` 통과. Kubernetes/Accordion 서버 측 검증과 실제 모델 추론은 환경 접근이 없어 미실시다.
 
 - 2026-09-28: 문서만 변경했다. 계획서 로컬 상대 링크와 `git diff --check` 검증을 수행했다. 런타임 코드·의존성 변경이 없어 `npm run lint`, `npm run build`는 실행하지 않았다. 실제 사내 연결·브라우저 정책·사용자 권한·Qwen3 성능은 미검증이다.
 

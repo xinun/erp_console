@@ -1,0 +1,54 @@
+"""Generate plain Kubernetes manifests from the same resources as the catalog."""
+import argparse
+import json
+import re
+from pathlib import Path
+from build_catalog import NAME, defaults, resources, yaml_lines
+
+
+def render(obj, name, values):
+    if isinstance(obj, dict):
+        return {k: render(v, name, values) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [render(v, name, values) for v in obj]
+    if isinstance(obj, str):
+        return re.sub(r"\{\{\.values\.(\w+)\}\}", lambda m: values[m[1]], obj.replace(NAME, name))
+    return obj
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", default="ai-ollama")
+    parser.add_argument("--namespace", default="ai")
+    parser.add_argument("--values", type=Path, help="JSON overrides of catalog defaults")
+    parser.add_argument("--storage-class", help="Omit to use cluster default StorageClass")
+    parser.add_argument("--storage-size", default="20Gi")
+    parser.add_argument("--output", type=Path, default=Path(__file__).parent / "kubernetes")
+    args = parser.parse_args()
+    for name in (args.name, args.namespace):
+        if len(name) > 50 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", name):
+            parser.error("name/namespace must be DNS labels of at most 50 characters")
+    values = dict(defaults)
+    if args.values:
+        overrides = json.loads(args.values.read_text(encoding="utf-8"))
+        if not isinstance(overrides, dict) or any(k not in values or not isinstance(v, str) for k, v in overrides.items()):
+            parser.error("values must contain known keys with string values")
+        values.update(overrides)
+    rendered = render(resources, args.name, values)
+    for resource in rendered:
+        resource["metadata"]["namespace"] = args.namespace
+    pvc = {"apiVersion": "v1", "kind": "PersistentVolumeClaim",
+           "metadata": {"name": values["pvcName"], "namespace": args.namespace},
+           "spec": {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": args.storage_size}}}}
+    if args.storage_class is not None:
+        pvc["spec"]["storageClassName"] = args.storage_class
+    namespace = {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": args.namespace}}
+    args.output.mkdir(parents=True, exist_ok=True)
+    for filename, documents in [("namespace.yaml", [namespace]), ("pvc.yaml", [pvc]), ("ollama.yaml", rendered)]:
+        content = "\n---\n".join("\n".join(yaml_lines(doc)) for doc in documents) + "\n"
+        (args.output / filename).write_text(content, encoding="utf-8")
+        print("Generated", args.output / filename)
+
+
+if __name__ == "__main__":
+    main()

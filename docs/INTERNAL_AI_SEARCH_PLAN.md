@@ -5,6 +5,13 @@
 - 대상: 기존 ERP Console, 독립 사내 검색 API, Ollama의 `qwen3:8b`
 - 운영 원칙: 같은 저장소에서 관리하고 Vercel 앱과 사내 API를 독립적으로 배포한다.
 
+### 2026-09-29 보완: 재사용 모델 API와 카탈로그
+
+- AI 검색 이용 자격은 유효한 Mattermost 사용자로 정한다. 별도 회사 Google 로그인 조건은 추가하지 않는다. 자료 조회는 해당 Mattermost 사용자의 권한을 유지한다.
+- 재사용 모델 API와 Mattermost 검색 API를 분리한다. 검색 API는 사용자 토큰을 검증하고 서버에 보관한 AI 서비스 키로 모델 게이트웨이를 호출한다. 공용 AI 키를 브라우저에 전달하지 않는다.
+- [Accordion 카탈로그 초안](../deploy/accordion/README.md)은 단일 Ollama Pod와 Bearer 게이트웨이, 인터넷 모델 다운로드, 기존 PVC/Secret 연결을 제공한다. 이 초안에는 Mattermost 검색 API와 웹페이지 변경은 포함되지 않는다.
+- 초안은 단일 키·단일 replica이며 토큰 발급 관리 UI, 분산 추론, 외부 HTTPS 경로는 후속 범위다. 실제 Accordion 배포는 아직 검증하지 않았다.
+
 ## 1. 목표와 범위
 
 기존 일반 검색은 현재 Vercel API 경로를 유지한다. AI 검색을 선택한 경우에만 사용자 브라우저가 VPN 또는 사내망을 통해 사내 API를 직접 호출한다. 화면 변경 때마다 ERP 전체를 사내에 재배포하지 않는 것이 목표다.

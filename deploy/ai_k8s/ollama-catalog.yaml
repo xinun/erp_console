@@ -1,0 +1,914 @@
+kind: ClusterCatalogTemplate
+apiVersion: cicd.accordions.co.kr/v1beta1
+metadata:
+  name: ai-ollama-810d1
+  selfLink: /apis/cicd.accordions.co.kr/v1beta1/clustercatalogtemplates/ai-ollama-810d1
+  uid: c10d3ee6-3bad-4be0-9eed-5f9e2000a659
+  resourceVersion: '212424621'
+  generation: 2
+  creationTimestamp: '2026-09-30T07:54:22Z'
+  labels:
+    packageName: ai-ollama
+    version: 3.1.0
+  annotations:
+    accordions.co.kr/description: CPU Ollama + gateway. PVC && token Secret
+    accordions.co.kr/summary: AI / Ollama
+    ui.accordions.co.kr/category: ai
+  finalizers:
+    - clustercatalogtemplate.hub.accordions.co.kr/finalizer
+  managedFields:
+    - manager: hub-operator
+      operation: Update
+      apiVersion: cicd.accordions.co.kr/v1beta1
+      time: '2026-09-30T08:03:42Z'
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:metadata:
+          f:finalizers:
+            .: {}
+            v:"clustercatalogtemplate.hub.accordions.co.kr/finalizer": {}
+    - manager: hub-server
+      operation: Update
+      apiVersion: cicd.accordions.co.kr/v1beta1
+      time: '2026-09-30T08:03:42Z'
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:metadata:
+          f:annotations:
+            .: {}
+            f:accordions.co.kr/description: {}
+            f:accordions.co.kr/summary: {}
+            f:ui.accordions.co.kr/category: {}
+          f:labels:
+            .: {}
+            f:packageName: {}
+            f:version: {}
+        f:spec:
+          .: {}
+          f:deployStrategy:
+            .: {}
+            f:clusters: {}
+            f:defaultPolicy: {}
+            f:image:
+              .: {}
+              f:archiveCount: {}
+              f:registryName: {}
+          f:resourceValues: {}
+          f:template:
+            .: {}
+            f:resources: {}
+spec:
+  deployStrategy:
+    defaultPolicy: Apply
+    clusters:
+      - name: localcluster
+        namespaces:
+          - ai
+    image:
+      archiveCount: 5
+      registryName: user-registry
+  template:
+    resources:
+      - name: ai-ollama
+        spec: |
+          apiVersion: "v1"
+          kind: "ConfigMap"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-storage-{{.values.storageRevision}}"
+          data:
+            prepare_pvc.py: |
+              """Create an absent claim, or validate without mutating an existing claim."""
+              import json
+              import base64
+              import secrets
+              import os
+              import re
+              import ssl
+              import sys
+              from decimal import Decimal
+              from pathlib import Path
+              from urllib import request, error, parse
+              
+              
+              def quantity(text):
+                  match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([EPTGMK]i|[EPTGMk]|[eE][+-]?[0-9]+)?", text)
+                  if not match:
+                      raise ValueError("Unsupported storage quantity")
+                  number, suffix = match.groups()
+                  factor = {"": 1, **{p + "i": 1024 ** n for n, p in enumerate("KMGTPE", 1)},
+                            **{p: 1000 ** n for n, p in enumerate("kMGTPE", 1)}}
+                  if suffix and re.fullmatch(r"[eE][+-]?[0-9]+", suffix):
+                      multiplier = Decimal(10) ** int(suffix[1:])
+                  else:
+                      multiplier = factor[suffix or ""]
+                  return Decimal(number) * multiplier
+              
+              
+              def validate(pvc, storage_class, size):
+                  spec = pvc["spec"]
+                  if pvc.get("metadata", {}).get("deletionTimestamp"):
+                      raise ValueError("PVC is being deleted")
+                  if pvc.get("status", {}).get("phase") == "Lost":
+                      raise ValueError("PVC is Lost")
+                  if spec.get("storageClassName") != storage_class:
+                      raise ValueError("PVC StorageClass does not match")
+                  if spec.get("volumeMode", "Filesystem") != "Filesystem":
+                      raise ValueError("PVC must use Filesystem volumeMode")
+                  if "ReadWriteOnce" not in spec.get("accessModes", []):
+                      raise ValueError("PVC must support ReadWriteOnce")
+                  if quantity(spec["resources"]["requests"]["storage"]) < quantity(size):
+                      raise ValueError("PVC is smaller than requested; resize separately")
+              
+              
+              def ensure(api, name, storage_class, size, create=True):
+                  path = "/" + parse.quote(name, safe="")
+                  try:
+                      pvc = api("GET", path)
+                  except error.HTTPError as exc:
+                      if exc.code != 404 or not create:
+                          raise
+                      body = {"apiVersion": "v1", "kind": "PersistentVolumeClaim", "metadata": {"name": name},
+                              "spec": {"accessModes": ["ReadWriteOnce"], "volumeMode": "Filesystem",
+                                       "storageClassName": storage_class,
+                                       "resources": {"requests": {"storage": size}}}}
+                      try:
+                          pvc = api("POST", "", body)
+                      except error.HTTPError as conflict:
+                          if conflict.code != 409:
+                              raise
+                          pvc = api("GET", path)
+                  validate(pvc, storage_class, size)
+              
+              
+              def main():
+                  name, storage_class, size = (os.environ[k] for k in ("PVC_NAME", "STORAGE_CLASS", "STORAGE_SIZE"))
+                  for setting in (name, storage_class):
+                      if len(setting) > 253 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", setting):
+                          raise ValueError("PVC_NAME and STORAGE_CLASS must be valid names; replace CHANGE-ME")
+                  if quantity(size) <= 0:
+                      raise ValueError("Storage size must be positive")
+                  auth = Path("/var/run/secrets/kubernetes.io/serviceaccount")
+                  namespace = (auth / "namespace").read_text().strip()
+                  base = "https://kubernetes.default.svc/api/v1/namespaces/" + parse.quote(namespace, safe="")
+                  opener = request.build_opener(request.ProxyHandler({}), request.HTTPSHandler(context=ssl.create_default_context(cafile=str(auth / "ca.crt"))))
+              
+                  def api(method, path, body=None):
+                      req = request.Request(base + path, method=method, data=json.dumps(body).encode() if body else None,
+                                            headers={"Authorization": "Bearer " + (auth / "token").read_text().strip(),
+                                                     "Content-Type": "application/json"})
+                      with opener.open(req, timeout=20) as response:
+                          return json.load(response)
+              
+                  ensure(lambda method, path, body=None: api(method, "/persistentvolumeclaims" + path, body),
+                         name, storage_class, size, create="--check-only" not in sys.argv)
+                  print("PVC checked successfully", flush=True)
+                  if "--check-only" not in sys.argv:
+                      ensure_secret(lambda method, path, body=None: api(method, "/secrets" + path, body), os.environ["TOKEN_SECRET"])
+                      print("API token Secret checked successfully (token not logged)", flush=True)
+              
+              
+              def ensure_secret(api, name):
+                  if len(name) > 253 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", name):
+                      raise ValueError("Invalid TOKEN_SECRET name")
+                  path = "/" + parse.quote(name, safe="")
+                  try:
+                      obj = api("GET", path)
+                  except error.HTTPError as exc:
+                      if exc.code != 404:
+                          raise
+                      token = secrets.token_hex(32)
+                      body = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": name}, "type": "Opaque",
+                              "data": {"token": base64.b64encode(token.encode()).decode()}}
+                      try:
+                          obj = api("POST", "", body)
+                      except error.HTTPError as conflict:
+                          if conflict.code != 409:
+                              raise
+                          obj = api("GET", path)
+                  if obj.get("metadata", {}).get("deletionTimestamp"):
+                      raise ValueError("Token Secret is being deleted")
+                  try:
+                      token = base64.b64decode(obj.get("data", {}).get("token", ""), validate=True).decode("utf-8").strip()
+                  except (ValueError, UnicodeError):
+                      raise ValueError("Existing Secret token is invalid; repair explicitly") from None
+                  if len(token) < 32 or not token.isascii() or any(ch.isspace() for ch in token):
+                      raise ValueError("Existing Secret needs a token of at least 32 ASCII characters without whitespace; not overwritten")
+              
+              
+              if __name__ == "__main__":
+                  try:
+                      main()
+                  except error.HTTPError as exc:
+                      print("Kubernetes API error: HTTP", exc.code, file=sys.stderr)
+                      sys.exit(1)
+                  except Exception as exc:
+                      print("PVC preparation failed:", str(exc), file=sys.stderr)
+                      sys.exit(1)
+          ---
+          apiVersion: "v1"
+          kind: "ServiceAccount"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-storage"
+          automountServiceAccountToken: false
+          ---
+          apiVersion: "rbac.authorization.k8s.io/v1"
+          kind: "Role"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-storage"
+          rules:
+            -
+              apiGroups:
+                - ""
+              resources:
+                - "persistentvolumeclaims"
+              resourceNames:
+                - "{{.values.pvcName}}"
+              verbs:
+                - "get"
+            -
+              apiGroups:
+                - ""
+              resources:
+                - "persistentvolumeclaims"
+              verbs:
+                - "create"
+            -
+              apiGroups:
+                - ""
+              resources:
+                - "secrets"
+              resourceNames:
+                - "{{.values.tokenSecret}}"
+              verbs:
+                - "get"
+            -
+              apiGroups:
+                - ""
+              resources:
+                - "secrets"
+              verbs:
+                - "create"
+          ---
+          apiVersion: "rbac.authorization.k8s.io/v1"
+          kind: "RoleBinding"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-storage"
+          roleRef:
+            apiGroup: "rbac.authorization.k8s.io"
+            kind: "Role"
+            name: "{{{.CATALOG.NAME}}}-storage"
+          subjects:
+            -
+              kind: "ServiceAccount"
+              name: "{{{.CATALOG.NAME}}}-storage"
+          ---
+          apiVersion: "v1"
+          kind: "ServiceAccount"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-check"
+          automountServiceAccountToken: false
+          ---
+          apiVersion: "rbac.authorization.k8s.io/v1"
+          kind: "Role"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-check"
+          rules:
+            -
+              apiGroups:
+                - ""
+              resources:
+                - "persistentvolumeclaims"
+              resourceNames:
+                - "{{.values.pvcName}}"
+              verbs:
+                - "get"
+          ---
+          apiVersion: "rbac.authorization.k8s.io/v1"
+          kind: "RoleBinding"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-check"
+          roleRef:
+            apiGroup: "rbac.authorization.k8s.io"
+            kind: "Role"
+            name: "{{{.CATALOG.NAME}}}-check"
+          subjects:
+            -
+              kind: "ServiceAccount"
+              name: "{{{.CATALOG.NAME}}}-check"
+          ---
+          apiVersion: "batch/v1"
+          kind: "Job"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-pvc-{{.values.storageRevision}}"
+          spec:
+            backoffLimit: 6
+            activeDeadlineSeconds: 600
+            template:
+              spec:
+                serviceAccountName: "{{{.CATALOG.NAME}}}-storage"
+                automountServiceAccountToken: false
+                restartPolicy: "Never"
+                containers:
+                  -
+                    name: "prepare-pvc"
+                    image: "{{.values.gatewayImage}}"
+                    command:
+                      - "python"
+                      - "-B"
+                      - "/storage/prepare_pvc.py"
+                    env:
+                      -
+                        name: "PVC_NAME"
+                        value: "{{.values.pvcName}}"
+                      -
+                        name: "STORAGE_CLASS"
+                        value: "{{.values.storageClass}}"
+                      -
+                        name: "STORAGE_SIZE"
+                        value: "{{.values.storageSize}}"
+                      -
+                        name: "TOKEN_SECRET"
+                        value: "{{.values.tokenSecret}}"
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 10001
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - "ALL"
+                    resources:
+                      requests:
+                        cpu: "50m"
+                        memory: "32Mi"
+                      limits:
+                        cpu: "250m"
+                        memory: "64Mi"
+                    volumeMounts:
+                      -
+                        name: "storage-code"
+                        mountPath: "/storage"
+                        readOnly: true
+                      -
+                        name: "storage-auth"
+                        mountPath: "/var/run/secrets/kubernetes.io/serviceaccount"
+                        readOnly: true
+                volumes:
+                  -
+                    name: "storage-code"
+                    configMap:
+                      name: "{{{.CATALOG.NAME}}}-storage-{{.values.storageRevision}}"
+                  -
+                    name: "storage-auth"
+                    projected:
+                      sources:
+                        -
+                          serviceAccountToken:
+                            path: "token"
+                            expirationSeconds: 3600
+                        -
+                          configMap:
+                            name: "kube-root-ca.crt"
+                            items:
+                              -
+                                key: "ca.crt"
+                                path: "ca.crt"
+                        -
+                          downwardAPI:
+                            items:
+                              -
+                                path: "namespace"
+                                fieldRef:
+                                  fieldPath: "metadata.namespace"
+          ---
+          apiVersion: "v1"
+          kind: "ConfigMap"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}-gateway"
+          data:
+            gateway.py: |
+              """Small, single-replica, server-to-server Ollama gateway. No third-party packages."""
+              import hashlib
+              import hmac
+              import json
+              import os
+              import threading
+              import urllib.error
+              import urllib.request
+              from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+              
+              MODEL = os.environ.get("MODEL_NAME", "qwen3:8b")
+              TOKEN_FILE = os.environ.get("TOKEN_FILE", "/auth/token")
+              UPSTREAM = "http://127.0.0.1:11434"
+              SLOT = threading.BoundedSemaphore(1)
+              OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+              
+              
+              def valid_token(header):
+                  try:
+                      with open(TOKEN_FILE, encoding="utf-8") as token_file:
+                          expected = token_file.read().strip()
+                  except OSError:
+                      return False
+                  if len(expected) < 32 or not header.startswith("Bearer "):
+                      return False
+                  return hmac.compare_digest(hashlib.sha256(header[7:].encode()).digest(),
+                                             hashlib.sha256(expected.encode()).digest())
+              
+              
+              def payload_for(body):
+                  messages = body.get("messages") if isinstance(body, dict) else None
+                  if not isinstance(messages, list) or not 1 <= len(messages) <= 32:
+                      raise ValueError("messages required")
+                  clean = []
+                  for message in messages:
+                      if not isinstance(message, dict) or message.get("role") not in ("system", "user", "assistant"):
+                          raise ValueError("invalid role")
+                      content = message.get("content")
+                      if not isinstance(content, str):
+                          raise ValueError("text only")
+                      clean.append({"role": message["role"], "content": content})
+                  if sum(len(m["content"]) for m in clean) > 6000:
+                      raise ValueError("input too long")
+                  return {"model": MODEL, "messages": clean, "stream": False, "think": False,
+                          "options": {"num_ctx": 4096, "num_predict": 512}, "keep_alive": "5m"}
+              
+              
+              class Handler(BaseHTTPRequestHandler):
+                  def setup(self):
+                      super().setup()
+                      self.connection.settimeout(15)
+              
+                  def log_message(self, *_):
+                      pass
+              
+                  def reply(self, status, body):
+                      data = json.dumps(body, ensure_ascii=False).encode()
+                      self.send_response(status)
+                      self.send_header("Content-Type", "application/json; charset=utf-8")
+                      self.send_header("Cache-Control", "no-store")
+                      self.send_header("Content-Length", str(len(data)))
+                      self.send_header("Connection", "close")
+                      self.end_headers()
+                      self.close_connection = True
+                      self.wfile.write(data)
+              
+                  def do_GET(self):
+                      if self.path == "/healthz":
+                          return self.reply(200, {"status": "alive"})
+                      if self.path == "/readyz":
+                          try:
+                              with OPENER.open(UPSTREAM + "/api/tags", timeout=3) as response:
+                                  models = json.load(response).get("models", [])
+                              ready = any(m.get("name") == MODEL for m in models)
+                              with open(TOKEN_FILE, encoding="utf-8") as token_file:
+                                  ready = ready and len(token_file.read().strip()) >= 32
+                          except Exception:
+                              ready = False
+                          return self.reply(200 if ready else 503, {"ready": ready})
+                      self.reply(404, {"error": "not_found"})
+              
+                  def do_POST(self):
+                      if self.path != "/api/chat":
+                          return self.reply(404, {"error": "not_found"})
+                      if not valid_token(self.headers.get("Authorization", "")):
+                          return self.reply(401, {"error": "unauthorized"})
+                      try:
+                          length = int(self.headers.get("Content-Length", "0"))
+                          if self.headers.get("Transfer-Encoding") or not 0 < length <= 32768:
+                              return self.reply(413, {"error": "invalid_body_size"})
+                          payload = payload_for(json.loads(self.rfile.read(length)))
+                      except (ValueError, UnicodeError):
+                          return self.reply(400, {"error": "invalid_request"})
+                      if not SLOT.acquire(blocking=False):
+                          return self.reply(429, {"error": "busy", "retryAfterSeconds": 10})
+                      try:
+                          request = urllib.request.Request(UPSTREAM + "/api/chat",
+                              data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+                          with OPENER.open(request, timeout=180) as response:
+                              data = response.read(1048577)
+                              if len(data) > 1048576:
+                                  raise ValueError("upstream too large")
+                          self.reply(200, json.loads(data))
+                      except Exception:
+                          self.reply(502, {"error": "model_unavailable"})
+                      finally:
+                          SLOT.release()
+              
+              
+              class BoundedServer(ThreadingHTTPServer):
+                  connections = threading.BoundedSemaphore(16)
+              
+                  def process_request(self, request, client_address):
+                      if not self.connections.acquire(blocking=False):
+                          self.shutdown_request(request)
+                          return
+                      try:
+                          super().process_request(request, client_address)
+                      except Exception:
+                          self.connections.release()
+                          raise
+              
+                  def process_request_thread(self, request, client_address):
+                      try:
+                          super().process_request_thread(request, client_address)
+                      finally:
+                          self.connections.release()
+              
+              
+              if __name__ == "__main__":
+                  BoundedServer(("0.0.0.0", 8080), Handler).serve_forever()
+          ---
+          apiVersion: "apps/v1"
+          kind: "Deployment"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}"
+          spec:
+            replicas: 1
+            strategy:
+              type: "Recreate"
+            selector:
+              matchLabels:
+                app: "{{{.CATALOG.NAME}}}"
+            template:
+              metadata:
+                labels:
+                  app: "{{{.CATALOG.NAME}}}"
+              spec:
+                automountServiceAccountToken: false
+                terminationGracePeriodSeconds: 200
+                initContainers:
+                  -
+                    name: "check-pvc"
+                    image: "{{.values.gatewayImage}}"
+                    command:
+                      - "python"
+                      - "-B"
+                      - "/storage/prepare_pvc.py"
+                      - "--check-only"
+                    env:
+                      -
+                        name: "PVC_NAME"
+                        value: "{{.values.pvcName}}"
+                      -
+                        name: "STORAGE_CLASS"
+                        value: "{{.values.storageClass}}"
+                      -
+                        name: "STORAGE_SIZE"
+                        value: "{{.values.storageSize}}"
+                      -
+                        name: "TOKEN_SECRET"
+                        value: "{{.values.tokenSecret}}"
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 10001
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - "ALL"
+                    resources:
+                      requests:
+                        cpu: "50m"
+                        memory: "32Mi"
+                      limits:
+                        cpu: "250m"
+                        memory: "64Mi"
+                    volumeMounts:
+                      -
+                        name: "storage-code"
+                        mountPath: "/storage"
+                        readOnly: true
+                      -
+                        name: "storage-auth"
+                        mountPath: "/var/run/secrets/kubernetes.io/serviceaccount"
+                        readOnly: true
+                  -
+                    name: "prepare-model"
+                    image: "{{.values.ollamaImage}}"
+                    command:
+                      - "/bin/sh"
+                      - "-c"
+                      - |
+                        set -eu
+                        ollama serve &
+                        server_pid=$!
+                        trap 'kill "$server_pid" 2>/dev/null || true' EXIT INT TERM
+                        n=0
+                        until ollama list >/dev/null 2>&1; do
+                          n=$((n+1)); [ "$n" -lt 60 ] || exit 1
+                          sleep 2
+                        done
+                        ollama pull "$MODEL_NAME"
+                        kill "$server_pid"
+                        wait "$server_pid" || true
+                        trap - EXIT INT TERM
+                    env:
+                      -
+                        name: "MODEL_NAME"
+                        value: "{{.values.model}}"
+                      -
+                        name: "OLLAMA_HOST"
+                        value: "127.0.0.1:11434"
+                      -
+                        name: "OLLAMA_MODELS"
+                        value: "/models"
+                      -
+                        name: "OLLAMA_NO_CLOUD"
+                        value: "1"
+                      -
+                        name: "OLLAMA_NUM_PARALLEL"
+                        value: "1"
+                      -
+                        name: "OLLAMA_MAX_LOADED_MODELS"
+                        value: "1"
+                      -
+                        name: "OLLAMA_MAX_QUEUE"
+                        value: "1"
+                      -
+                        name: "OLLAMA_CONTEXT_LENGTH"
+                        value: "4096"
+                    resources:
+                      requests:
+                        cpu: "{{.values.cpuRequest}}"
+                        memory: "{{.values.memoryRequest}}"
+                      limits:
+                        cpu: "{{.values.cpuLimit}}"
+                        memory: "{{.values.memoryLimit}}"
+                    volumeMounts:
+                      -
+                        name: "models"
+                        mountPath: "/models"
+                containers:
+                  -
+                    name: "ollama"
+                    image: "{{.values.ollamaImage}}"
+                    args:
+                      - "serve"
+                    env:
+                      -
+                        name: "MODEL_NAME"
+                        value: "{{.values.model}}"
+                      -
+                        name: "OLLAMA_HOST"
+                        value: "127.0.0.1:11434"
+                      -
+                        name: "OLLAMA_MODELS"
+                        value: "/models"
+                      -
+                        name: "OLLAMA_NO_CLOUD"
+                        value: "1"
+                      -
+                        name: "OLLAMA_NUM_PARALLEL"
+                        value: "1"
+                      -
+                        name: "OLLAMA_MAX_LOADED_MODELS"
+                        value: "1"
+                      -
+                        name: "OLLAMA_MAX_QUEUE"
+                        value: "1"
+                      -
+                        name: "OLLAMA_CONTEXT_LENGTH"
+                        value: "4096"
+                    resources:
+                      requests:
+                        cpu: "{{.values.cpuRequest}}"
+                        memory: "{{.values.memoryRequest}}"
+                      limits:
+                        cpu: "{{.values.cpuLimit}}"
+                        memory: "{{.values.memoryLimit}}"
+                    volumeMounts:
+                      -
+                        name: "models"
+                        mountPath: "/models"
+                    readinessProbe:
+                      exec:
+                        command:
+                          - "ollama"
+                          - "list"
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                  -
+                    name: "gateway"
+                    image: "{{.values.gatewayImage}}"
+                    command:
+                      - "python"
+                      - "-B"
+                      - "/app/gateway.py"
+                    env:
+                      -
+                        name: "MODEL_NAME"
+                        value: "{{.values.model}}"
+                    ports:
+                      -
+                        name: "http"
+                        containerPort: 8080
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 10001
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - "ALL"
+                    resources:
+                      requests:
+                        cpu: "100m"
+                        memory: "64Mi"
+                      limits:
+                        cpu: "500m"
+                        memory: "256Mi"
+                    volumeMounts:
+                      -
+                        name: "code"
+                        mountPath: "/app"
+                        readOnly: true
+                      -
+                        name: "auth"
+                        mountPath: "/auth"
+                        readOnly: true
+                    readinessProbe:
+                      httpGet:
+                        path: "/readyz"
+                        port: "http"
+                      timeoutSeconds: 5
+                      periodSeconds: 10
+                    livenessProbe:
+                      httpGet:
+                        path: "/healthz"
+                        port: "http"
+                      initialDelaySeconds: 10
+                      timeoutSeconds: 3
+                volumes:
+                  -
+                    name: "models"
+                    persistentVolumeClaim:
+                      claimName: "{{.values.pvcName}}"
+                  -
+                    name: "code"
+                    configMap:
+                      name: "{{{.CATALOG.NAME}}}-gateway"
+                  -
+                    name: "auth"
+                    secret:
+                      secretName: "{{.values.tokenSecret}}"
+                      items:
+                        -
+                          key: "token"
+                          path: "token"
+                  -
+                    name: "storage-code"
+                    configMap:
+                      name: "{{{.CATALOG.NAME}}}-storage-{{.values.storageRevision}}"
+                  -
+                    name: "storage-auth"
+                    projected:
+                      sources:
+                        -
+                          serviceAccountToken:
+                            path: "token"
+                            expirationSeconds: 3600
+                        -
+                          configMap:
+                            name: "kube-root-ca.crt"
+                            items:
+                              -
+                                key: "ca.crt"
+                                path: "ca.crt"
+                        -
+                          downwardAPI:
+                            items:
+                              -
+                                path: "namespace"
+                                fieldRef:
+                                  fieldPath: "metadata.namespace"
+                serviceAccountName: "{{{.CATALOG.NAME}}}-check"
+          ---
+          apiVersion: "v1"
+          kind: "Service"
+          metadata:
+            name: "{{{.CATALOG.NAME}}}"
+          spec:
+            type: "ClusterIP"
+            selector:
+              app: "{{{.CATALOG.NAME}}}"
+            ports:
+              -
+                name: "http"
+                port: 8080
+                targetPort: "http"
+        policy: Apply
+        valueschema:
+          properties:
+            cpuLimit:
+              default: '3'
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: CPU 제한
+              x-ui-order: 7
+            cpuRequest:
+              default: '1'
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: CPU 요청
+              x-ui-order: 6
+            gatewayImage:
+              default: python:3.12-slim
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: 게이트웨이 Python 이미지
+              x-ui-order: 2
+            memoryLimit:
+              default: 9Gi
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: 메모리 제한
+              x-ui-order: 9
+            memoryRequest:
+              default: 7Gi
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: 메모리 요청
+              x-ui-order: 8
+            model:
+              default: qwen3:8b
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: 모델명
+              x-ui-order: 3
+            ollamaImage:
+              default: ollama/ollama:0.34.2
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: Ollama 이미지
+              x-ui-order: 1
+            pvcName:
+              default: ai-models
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: 모델 PVC 이름 (없으면 생성)
+              x-ui-order: 4
+            storageClass:
+              default: accordion-storage
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: StorageClass (실제 이름 필수)
+            storageRevision:
+              default: '2'
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: 스토리지 작업 버전 (숫자, 재실행 시 증가)
+            storageSize:
+              default: 20Gi
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: PVC 최소 용량
+            tokenSecret:
+              default: ai-api-token
+              minLength: 1
+              type: string
+              x-ui-basic-option: true
+              x-ui-displayName: API 토큰 Secret 이름 (없으면 생성)
+              x-ui-order: 5
+          required:
+            - ollamaImage
+            - gatewayImage
+            - model
+            - pvcName
+            - tokenSecret
+            - cpuRequest
+            - cpuLimit
+            - memoryRequest
+            - memoryLimit
+            - storageClass
+            - storageSize
+            - storageRevision
+          type: object
+  resourceValues:
+    - name: ai-ollama
+      values:
+        cpuLimit: '3'
+        cpuRequest: '1'
+        gatewayImage: python:3.12-slim
+        memoryLimit: 9Gi
+        memoryRequest: 7Gi
+        model: qwen3:8b
+        ollamaImage: ollama/ollama:0.34.2
+        pvcName: ai-models
+        storageClass: accordion-storage
+        storageRevision: '2'
+        storageSize: 20Gi
+        tokenSecret: ai-api-token
+status:
+  resources: null

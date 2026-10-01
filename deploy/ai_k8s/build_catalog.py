@@ -69,8 +69,8 @@ resources = [
                                    {"name": "auth", "secret": {"secretName": value("tokenSecret"),
                                       "items": [{"key": "token", "path": "token"}]}}]}}}},
     {"apiVersion": "v1", "kind": "Service", "metadata": {"name": NAME},
-     "spec": {"type": "ClusterIP", "selector": labels,
-              "ports": [{"name": "http", "port": 8080, "targetPort": "http"}]}}
+     "spec": {"type": "NodePort", "externalTrafficPolicy": "Cluster", "selector": labels,
+              "ports": [{"name": "http", "port": 8080, "targetPort": "http", "nodePort": 30450}]}}
 ]
 titles = ["Ollama 이미지", "게이트웨이 Python 이미지", "모델명", "기존 모델 PVC", "기존 API 토큰 Secret",
           "CPU 요청", "CPU 제한", "메모리 요청", "메모리 제한"]
@@ -91,7 +91,7 @@ def yaml_lines(obj, indent=0):
         elif isinstance(item, str) and "\n" in item:
             yield prefix + " |" + ("" if item.endswith("\n") else "-")
             for line in item.rstrip("\n").split("\n"):
-                yield " " * (indent + 2) + line
+                yield " " * (indent + 2) + line if line else ""
         else:
             yield prefix + " " + json.dumps(item, ensure_ascii=False)
 
@@ -133,7 +133,7 @@ spec:
     - name: ai-ollama
       values: '''
 output = header + json.dumps(catalog_defaults) + "\n  template:\n    resources:\n      - name: ai-ollama\n        policy: Apply\n        spec: |\n"
-output += "\n".join("          " + line for line in spec.splitlines())
+output += "\n".join("          " + line if line else "" for line in spec.splitlines())
 output += "\n        valueschema: " + json.dumps(schema, ensure_ascii=False)
 output += "\n"
 if __name__ == "__main__":

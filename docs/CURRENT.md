@@ -1,6 +1,6 @@
 # 현재 작업 상태
 
-마지막 갱신: 2026-09-30
+마지막 갱신: 2026-10-01
 
 ## 현재 기준
 
@@ -9,6 +9,9 @@
 - 운영 주소: `https://erp-console.vercel.app/search`
 
 ## 최근 완료
+
+- 2026-10-01 일반 Kubernetes YAML 동기화: build_kubernetes.py가 최신 catalog_resources/catalog_defaults를 공유해 준비 Job, PVC/Secret 생성 권한, 시작 전 PVC 검사 등 11개 리소스를 동일하게 생성한다. RoleBinding subject namespace는 명시한다. 카탈로그/일반 Service 모두 NodePort 30450, externalTrafficPolicy Cluster로 반영하고 일반 생성기에 --node-port 변경 옵션 추가했다. 별도 pvc.yaml은 자동 생성 흐름과 중복되어 제거하고 namespace.yaml/ollama.yaml 두 파일로 정리했다. 배포/재배포/포트 충돌/토큰 회수 안내 갱신. 서버 리소스는 조작하지 않았다. namespace 차이 정규화 후 두 버전 11개 리소스 완전 일치, 내장 소스 일치, 잘못된 NodePort 거부, diff 검사 통과. npm run lint, npm run build 통과. 실제 일반 Kubernetes 배포와 NodePort 접근은 미검증.
+
 
 - 2026-09-30 사용자 ClusterCatalogTemplate 예시에 맞춰 카탈로그 종류를 ClusterCatalogTemplate으로 변경하고 metadata.name=ai-ollama-810d1, labels.packageName=ai-ollama, labels.version="3.1.0", category=ai 반영. 생성기도 동기화하고 클러스터 범위 리소스라 catalog-namespace 옵션 제거. 예시의 spec 구조에 맞춰 Catalog용 pipelineTemplate/terminateStrategy 제외. 서버 관리 필드 uid/selfLink/resourceVersion/generation/creationTimestamp는 복사하지 않았다. 메타데이터와 내부 11개 리소스 YAML 검사 및 diff 검사 통과. 메타데이터 변경으로 lint/build 재실행 생략, 실제 웹훅 등록 미검증.
 

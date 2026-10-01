@@ -1,106 +1,84 @@
 # 일반 Kubernetes 배포
 
-Accordion CRD 없이 `kubectl`로 배포하는 버전이다. 카탈로그와 같은 Ollama + Bearer
-게이트웨이를 한 Pod로 실행한다. namespace는 `ai`, Deployment/Service 이름은
-`ai-ollama`이다. 기존 Accordion 배포와 별도로 자원을 사용하므로 중복 실행 여부를 확인한다.
-이 매니페스트는 내부 PoC용이며 실제 클러스터에서는 미검증이다.
+최신 카탈로그와 동일한 공통 리소스에서 생성한다. Accordion CRD 없이 배포 가능하다.
+namespace는 ai, 앱 이름은 ai-ollama, NodePort는 30450이다.
+파일은 namespace.yaml과 ollama.yaml 두 개다. PVC·Secret은 준비 Job이 자동 생성한다.
+이전 pvc.yaml은 자동 생성 방식으로 통합하여 제거했다.
 
-## 1. 파일과 클러스터 확인
+## 배포
 
-이 폴더의 namespace.yaml, pvc.yaml, ollama.yaml을 kubectl 사용 가능한 서버로 복사하고
-해당 폴더에서 아래 명령을 실행한다. CRD나 Python은 배포 서버에 필요하지 않다.
+실제 StorageClass가 accordion-storage인지 확인한다. 다르면 아래 생성 명령으로 바꾼다.
+이미지 레지스트리 및 Ollama 모델 다운로드 경로에 배치 후보 노드가 접근할 수 있어야 한다.
+Pod 요청은 CPU 1100m, 메모리 7Gi+64Mi이다. 노드 예약량/taint를 확인한다.
+Role/RoleBinding 생성 권한이 필요하다.
 
 ```bash
 kubectl config current-context
 kubectl get nodes
 kubectl get storageclass
+kubectl get services -A
 kubectl apply -f namespace.yaml
-```
-
-`pvc.yaml`은 20Gi RWO를 요청한다. 기본 StorageClass가 없다면 `spec.storageClassName`에
-실제 StorageClass 이름을 추가하거나 관리자가 준비한 PV에 맞게 수정한다.
-예상 메모리 요청은 Pod 합계 7Gi+64Mi, CPU 2100m이다. 기존 requests와 taint를 확인한다.
-
-## 2. 모델 저장소와 API 키 생성
-
-```bash
-kubectl apply -f pvc.yaml
-umask 077
-openssl rand -hex 32 > ai-token.txt
-kubectl -n ai create secret generic ai-api-token --from-file=token=ai-token.txt
-```
-
-기존 Secret이 있으면 덮어쓰지 않고 기존 키를 사용할지 먼저 결정한다. `ai-token.txt`는
-비밀 파일이므로 Git/채팅에 올리지 않는다. 암호 관리 도구에 보관한 뒤 임시 파일을 삭제한다.
-Kubernetes ServiceAccount 토큰이 아닌 별도의 앱 API 키다.
-PVC가 WaitForFirstConsumer이면 Pod 배치 전 Pending은 정상일 수 있다.
-
-## 3. 검증과 배포
-
-```bash
 kubectl apply --dry-run=server -f ollama.yaml
 kubectl apply -f ollama.yaml
-kubectl -n ai get pods,pvc,svc
+kubectl -n ai get jobs,pvc,pods,svc
+kubectl -n ai logs job/ai-ollama-pvc-2
 kubectl -n ai logs deployment/ai-ollama -c prepare-model -f
 kubectl -n ai rollout status deployment/ai-ollama --timeout=20m
 ```
 
-최초에 약 5.2GB 모델을 다운로드한다. 인터넷/레지스트리 속도에 따라 시간이 달라진다.
-다운로드 오류는 initContainer 로그, Pending은 `kubectl describe pod`에서 확인한다.
-StorageClass/PV/PVC 접근 모드와 노드 자원에 따라 배치 가능한 노드가 달라진다.
-이미지 기본값은 `ollama/ollama:0.34.2`, `python:3.12-slim`이다. 이미지 pull과 CPU 추론은
-현장에서 확인해야 한다. 운영 전 검증한 image digest로 고정한다.
+기존 카탈로그 배포가 이미 30450을 사용 중이면 같은 클러스터에서 두 Service가 이 포트를
+동시에 사용할 수 없다. 새 앱은 --node-port로 다른 포트를 선택한다.
+최초 PVC not found/Secret not found 이벤트는 준비 Job 완료 전 나타날 수 있다.
+WaitForFirstConsumer에서는 Pod 스케줄링과 함께 볼륨을 할당하므로 먼저 PVC Bound를 기다리지 않는다.
 
-## 4. API 호출 확인
+## 사용
 
-```bash
-kubectl -n ai port-forward svc/ai-ollama 18080:8080
-```
-
-다른 터미널에서:
+같은 클러스터에서는 http://ai-ollama.ai.svc:8080/api/chat을 사용한다.
+VPN에서는 연결 가능한 노드 IP의 30450으로 접근한다. externalTrafficPolicy는 Cluster다.
+NodePort는 HTTP이며 방화벽/VPN 경로가 허용되어야 한다. 인터넷 공개는 별도 HTTPS 구성이 필요하다.
 
 ```bash
-curl http://127.0.0.1:18080/readyz
-AI_TOKEN="$(cat ai-token.txt)"
-curl http://127.0.0.1:18080/api/chat \
+AI_TOKEN="$(kubectl -n ai get secret ai-api-token -o jsonpath='{.data.token}' | base64 --decode)"
+curl --max-time 200 http://<노드IP>:30450/api/chat \
   -H "Authorization: Bearer ${AI_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{"messages":[{"role":"user","content":"한국어로 짧게 인사해줘."}]}'
 unset AI_TOKEN
 ```
 
-토큰 없이 POST하면 401, 관리 API는 404, 이미 생성 중이면 429가 정상이다.
-클러스터 내 백엔드 주소는 `http://ai-ollama.ai.svc:8080`이다.
-Service는 ClusterIP이며 외부 노출, TLS, CORS를 설정하지 않는다. 외부 연결은 별도
-HTTPS 프록시와 제한 정책이 필요하다. 공용 키를 웹 브라우저에 넣지 않는다.
-
-## 모델 변경과 재생성
-
-저장소에서 아래처럼 JSON 설정 파일을 만들고 생성한다. 배포 서버에서 생성할 필요는 없다.
-
-```json
-{"model":"qwen3:4b","memoryRequest":"5Gi","memoryLimit":"7Gi"}
-```
+관리자 터미널 대화:
 
 ```bash
-python -B deploy/ai_k8s/build_kubernetes.py --values my-values.json --storage-class 실제스토리지클래스
+kubectl -n ai exec -it deployment/ai-ollama -c ollama -- ollama run qwen3:8b
 ```
 
-`--namespace`, `--name`, `--storage-size`, `--output`도 지정할 수 있다.
-생성 시 출력 폴더의 YAML 3개를 덮어쓴다. 직접 수정했다면 재생성 전에 변경을 보존한다.
-변경한 ollama.yaml을 다시 apply하면 모델 환경변수 변경으로 Pod가 교체되고 새 모델을 준비한다.
-한 replica/Recreate이므로 교체 중 중단된다. 예전 모델 파일은 PVC에 남는다.
-게이트웨이 코드(ConfigMap)만 변경한 경우에는 추가로 rollout restart가 필요하다.
-PVC의 StorageClass는 생성 후 단순 변경할 수 없고 용량 확장도 스토리지 지원 여부를 확인한다.
+## 변경과 재배포
 
-## 중지·제거
+생성은 저장소에서 실행한다. 배포 서버에는 Python이 필요 없다.
+
+```bash
+python -B deploy/ai_k8s/build_kubernetes.py --namespace ai --name ai-ollama --storage-class 실제클래스 --node-port 30451
+```
+
+--values JSON으로 카탈로그와 같은 입력을 덮어쓸 수 있다. --storage-size, --output도 지원한다.
+예: {"model":"qwen3:4b","memoryRequest":"5Gi","memoryLimit":"7Gi","storageRevision":"3"}
+기존 PVC/Secret은 재배포 시 변경하지 않는다. 잘못된 기존 값은 오류로 처리한다.
+준비 Job 설정/코드/이미지 변경, 실패 재시도, 삭제된 PVC/Secret 복구에는 storageRevision을 증가시킨다.
+완료한 동일 Job은 apply만으로 재실행되지 않는다. 새 YAML 적용 후 초기화 상태를 확인한다.
+게이트웨이 코드만 변경하면 rollout restart가 필요하다. Recreate 교체 중 서비스가 중단된다.
+직접 YAML을 수정했다면 생성 전 보존한다. 생성은 두 YAML을 덮어쓴다.
+별도 인스턴스는 namespace 또는 pvcName/tokenSecret을 분리하고 NodePort도 고유하게 지정한다.
+
+## 중지와 삭제
 
 ```bash
 kubectl -n ai scale deployment/ai-ollama --replicas=0
+kubectl delete -f ollama.yaml
 ```
 
-앱만 제거하려면 `kubectl delete -f ollama.yaml`을 사용한다. PVC와 Secret은 남는다.
-namespace/PVC 삭제는 모델 데이터 삭제를 유발할 수 있으므로 일괄 삭제하지 않는다.
+앱 YAML에는 PVC/Secret이 포함되지 않고 Job이 ownerReferences 없이 생성하므로 위 삭제에는 남는다.
+namespace/PVC/Secret 직접 삭제는 별개다. 준비 Job 계정은 지정 PVC/Secret get 및 namespace 내 create만
+허용하며 수정/삭제 권한은 없다. AI 검사 계정은 PVC get만 허용한다.
 
-단일 API 키/텍스트 채팅만 지원하며 사용자별 키 관리 UI, Mattermost 검색, 모델 분산은
-포함하지 않는다. 기타 게이트웨이 제한은 [상위 안내](../README.md)를 참고한다.
+로컬 생성·동등성 검사는 수행했으나 일반 Kubernetes에 대한 실제 배포/추론은 미검증이다.
+기타 게이트웨이 제한은 [상위 안내](../README.md)를 따른다.

@@ -112,3 +112,6 @@ https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_cr
 생성기는 --deploy-namespace를 필수로 받는다. proc에 암묵적으로 배포하는 기본값을 제거했다.
 기존 proc 리소스는 자동 이동/삭제되지 않는다. ai로 새 배포하면 PVC와 Secret도 별도로 준비되므로
 토큰과 모델 저장소가 proc과 달라진다. 중복 AI가 자원을 예약할 수 있으므로 전환 시 기존 배포를 확인한다.
+
+카탈로그와 일반 Kubernetes 모두 NodePort 30450 → 게이트웨이 8080, externalTrafficPolicy Cluster다.
+동일 클러스터 내 다른 Service가 30450을 점유하면 포트를 바꿔야 한다. 일반 생성기는 --node-port를 지원한다.

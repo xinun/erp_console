@@ -10,6 +10,20 @@
 
 ## 최근 완료
 
+- 2026-10-01 등록된 Tomcat/WildFly 두 예시의 deployStrategy에 clusters 블록이 없음을 확인하여 Ollama 카탈로그와 생성기도 clusters 전체를 제거했다. namespaces만 생략하거나 빈 배열로 넣는 방식은 등록 오류로 확인되었다. 로고와 사용자 수정 내용은 유지하고 설명을 동기화했다. YAML 파싱, clusters 부재, 내장 11개 리소스, 설명 일치 및 diff 검사 통과. 제한적 설정/문서 변경으로 lint/build 재실행 생략. 실제 Ollama 카탈로그 재등록과 배포 화면의 대상 선택 적용은 미검증이다.
+
+- 2026-10-01 namespaces 생략 후 등록에서 array 타입 오류가 보고되어 카탈로그와 생성기에 namespaces: []를 명시했다. 특정 namespace 이름은 고정하지 않았다. 사용자 수정 metadata.name=ai-ollama와 PNG Base64 로고를 보존하고 ollama-logo.png를 생성기 원본으로 저장했다. YAML 파싱/빈 배열/PNG 시그니처/생성기 로고 일치/diff 검사 통과. 카탈로그 설정 변경으로 lint/build 재실행 생략. 빈 배열의 웹훅 허용 여부와 실제 배포 namespace 선택 동작은 미검증이다.
+
+- 2026-10-01 사용자 등록 시험을 위해 카탈로그 deployStrategy.clusters의 namespaces 필드를 제거했다. 생성기도 같은 필드를 생략하며 --deploy-namespace 옵션을 제거하고 안내를 갱신했다. 일반 Kubernetes YAML의 namespace는 유지했다. YAML 파싱, namespace 필드 부재, 내장 11개 리소스와 설명 일치, diff 검사 통과. 제한적인 카탈로그 설정/문서 변경으로 lint/build 재실행 생략. namespaces 생략의 실제 Accordion 웹훅 허용 여부 및 UI 선택 namespace 적용은 사용자 등록 시험 전 미검증이다.
+
+- 2026-10-01 카탈로그 설명 재검토 및 구성도 추가: 사용자가 YAML readme에서 수정·삭제한 내용을 AsciiDoc 원본에 동기화해 보존하고, 사용 명령의 namespace·배포 이름이 예시임을 명시했다. 이미지 생성 도구로 ai-ollama-architecture.png를 작성하여 구성도 섹션에 연결했다. 준비 Job의 PVC·Secret 생성/재사용, 단일 Pod의 두 컨테이너, NodePort 자동 할당 → 게이트웨이 8080 → Ollama 11434, 관리자 exec 직접 접속을 표현했다. 설명/annotation 일치, 11개 리소스 YAML 파싱 및 diff 검사 통과. 문서·이미지 변경이므로 lint/build 재실행 생략. YAML은 이미지 파일을 포함하지 않으므로 허브에서 접근 가능한 별도 게시가 필요하며 실제 Accordion 이미지 렌더링은 미검증이다.
+
+- 2026-10-01 Ollama 버전/설명 검토: 사용자 직접 수정한 YAML readme를 ai-ollama.adoc에 먼저 동기화하여 보존. 짧은 description은 한국어 한 문장으로 정리, 모든 Ollama 모델 사용 가능처럼 읽히는 표현을 자원 조건부로 수정, CLI 인증과 API 토큰을 구분, 게이트웨이 리소스의 입력 변경 가능 오표기를 템플릿 고정값으로 수정, 공개 설명의 작업 이력/검증 섹션 제거. 공식 v0.34.2/v0.34.3/v0.34.4/v0.35.0 릴리스 검토: 0.34.2는 사용자 기존 설치/기동 확인 버전에서 선택했으며 특별한 장기지원 판단이 아니었다. 0.35.0은 조사 시 Latest 표시, 중간 버전의 서버/런타임 수정 존재. 배포 공유 기본값은 0.35.0 별도 추론/재배포/토큰 검증 후 고정하는 것을 권장하되 이번 검토만으로 기본 이미지 변경은 하지 않았다. 문서/annotation 일치, 11개 리소스 YAML 파싱, 기존 이미지 유지, diff 검사 통과. 문서/metadata 변경이라 lint/build 재실행 생략. 신규 버전 성능·메모리·추론/이미지 pull은 실환경 미검증.
+
+- 2026-10-01 NodePort 자동 할당으로 변경: 기존 템플릿은 NodePort 30450을 명시했으므로 고정이었다. 사용자 요청에 따라 양쪽 공통 Service에서 nodePort 번호를 제거하고 type=NodePort, externalTrafficPolicy=Cluster, port=8080 유지. 일반 생성기의 --node-port는 선택적 고정 옵션으로 변경. AsciiDoc/README 호출 예시는 실제 Service nodePort 조회 방식으로 갱신하고 30450 고정 설명 제거. 양쪽 YAML 타입/번호 생략/포트 및 annotation 문서 일치, diff 검사 통과. 제한적인 Service 설정/문서 변경으로 lint/build 재실행 생략. 기존 서버 Service는 조작하지 않았으며 포트 유지·실제 접속은 클러스터 미검증.
+
+- 2026-10-01 카탈로그 설명 작성: 사용자 제공 Accordion AsciiDoc 형식으로 deploy/ai_k8s/ai-ollama.adoc 추가. 버전 3.1.0/category ai, 실제 입력 12개, 배포 리소스, PVC·Secret 자동 준비, NodePort 30450, 터미널/API 사용, 재배포·권한·보존을 설명했다. 생성기가 accordions.co.kr/readme annotation에 문서를 포함하도록 연결하고 카탈로그 재생성. 문서와 annotation 일치/12개 변수 누락 없음/블록 구분자/버전·카테고리/내부 11개 YAML/diff 검사 통과. 문서와 metadata만 변경해 lint/build 재실행 생략. Accordion의 실제 AsciiDoc 렌더링 및 외부 include/CSS/PDF 자산 접근은 미검증이며 문서 검증 완료로 간주하지 않는다.
+
 - 2026-10-01 일반 Kubernetes YAML 동기화: build_kubernetes.py가 최신 catalog_resources/catalog_defaults를 공유해 준비 Job, PVC/Secret 생성 권한, 시작 전 PVC 검사 등 11개 리소스를 동일하게 생성한다. RoleBinding subject namespace는 명시한다. 카탈로그/일반 Service 모두 NodePort 30450, externalTrafficPolicy Cluster로 반영하고 일반 생성기에 --node-port 변경 옵션 추가했다. 별도 pvc.yaml은 자동 생성 흐름과 중복되어 제거하고 namespace.yaml/ollama.yaml 두 파일로 정리했다. 배포/재배포/포트 충돌/토큰 회수 안내 갱신. 서버 리소스는 조작하지 않았다. namespace 차이 정규화 후 두 버전 11개 리소스 완전 일치, 내장 소스 일치, 잘못된 NodePort 거부, diff 검사 통과. npm run lint, npm run build 통과. 실제 일반 Kubernetes 배포와 NodePort 접근은 미검증.
 
 

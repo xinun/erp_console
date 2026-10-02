@@ -1,5 +1,6 @@
 """Generate Accordion Catalog YAML using only Python's standard library."""
 import json
+import base64
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -70,7 +71,7 @@ resources = [
                                       "items": [{"key": "token", "path": "token"}]}}]}}}},
     {"apiVersion": "v1", "kind": "Service", "metadata": {"name": NAME},
      "spec": {"type": "NodePort", "externalTrafficPolicy": "Cluster", "selector": labels,
-              "ports": [{"name": "http", "port": 8080, "targetPort": "http", "nodePort": 30450}]}}
+              "ports": [{"name": "http", "port": 8080, "targetPort": "http"}]}}
 ]
 titles = ["Ollama 이미지", "게이트웨이 Python 이미지", "모델명", "기존 모델 PVC", "기존 API 토큰 Secret",
           "CPU 요청", "CPU 제한", "메모리 요청", "메모리 제한"]
@@ -112,12 +113,12 @@ spec = "\n---\n".join("\n".join(yaml_lines(r)) for r in catalog_resources)
 header = '''apiVersion: cicd.accordions.co.kr/v1beta1
 kind: ClusterCatalogTemplate
 metadata:
-  name: ai-ollama-810d1
+  name: ai-ollama
   labels:
     packageName: ai-ollama
     version: "3.1.0"
   annotations:
-    accordions.co.kr/description: "CPU Ollama + Bearer gateway. PVC and token Secret created if absent, existing resources preserved. Single replica."
+    accordions.co.kr/description: "Ollama와 토큰 인증 API를 배포하며, 모델 PVC와 API 토큰 Secret을 자동 준비합니다."
     accordions.co.kr/summary: "AI / Ollama"
     ui.accordions.co.kr/category: ai
 spec:
@@ -126,25 +127,18 @@ spec:
     image:
       archiveCount: 5
       registryName: user-registry
-    clusters:
-      - name: localcluster
-        namespaces: []
   resourceValues:
     - name: ai-ollama
       values: '''
+readme = (ROOT / "ai-ollama.adoc").read_text(encoding="utf-8")
+logo = base64.b64encode((ROOT / "ollama-logo.png").read_bytes()).decode("ascii")
+header = header.replace("    ui.accordions.co.kr/category: ai\n", "    ui.accordions.co.kr/category: ai\n    accordions.co.kr/logo.png-data: >-\n      " + logo + "\n")
+header = header.replace("    ui.accordions.co.kr/category: ai\n", "    ui.accordions.co.kr/category: ai\n    accordions.co.kr/readme: |\n" +
+                        "\n".join("      " + line if line else "" for line in readme.splitlines()) + "\n")
 output = header + json.dumps(catalog_defaults) + "\n  template:\n    resources:\n      - name: ai-ollama\n        policy: Apply\n        spec: |\n"
 output += "\n".join("          " + line if line else "" for line in spec.splitlines())
 output += "\n        valueschema: " + json.dumps(schema, ensure_ascii=False)
 output += "\n"
 if __name__ == "__main__":
-    import argparse
-    import re
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--deploy-namespace", required=True, help="Actual workload destination; must match the namespace selected in Accordion")
-    args = parser.parse_args()
-    for namespace in (args.deploy_namespace,):
-        if namespace is not None and (len(namespace) > 63 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", namespace)):
-            parser.error("namespace must be a Kubernetes DNS label of at most 63 characters")
-    rendered_output = output.replace("namespaces: []", "namespaces: " + json.dumps([args.deploy_namespace]))
-    (ROOT / "ollama-catalog.yaml").write_text(rendered_output, encoding="utf-8")
+    (ROOT / "ollama-catalog.yaml").write_text(output, encoding="utf-8")
     print("Generated ollama-catalog.yaml")

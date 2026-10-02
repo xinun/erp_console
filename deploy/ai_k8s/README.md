@@ -1,7 +1,16 @@
-현재 등록 파일은 ClusterCatalogTemplate 형식이다. 이름은 ai-ollama-810d1,
+카탈로그 설명 원본은 `ai-ollama.adoc`이다. 생성 시 `accordions.co.kr/readme` annotation에 포함한다.
+허브 공통 include와 CSS/PDF 관련 자산은 Accordion 렌더링 환경에서 제공되어야 한다.
+
+구성도는 같은 폴더의 `ai-ollama-architecture.png`이며 AsciiDoc에서 참조한다.
+카탈로그 YAML에는 이미지 파일 자체가 포함되지 않는다. 허브에 게시할 때는 이미지를
+렌더러가 접근할 수 있는 위치에 함께 올리거나 AsciiDoc의 이미지 경로를 게시 URL로 바꾼 뒤
+카탈로그를 다시 생성해야 한다. 실제 허브 이미지 업로드 경로는 아직 확인하지 않았다.
+
+현재 등록 파일은 ClusterCatalogTemplate 형식이다. 이름은 ai-ollama,
 packageName은 ai-ollama, version은 3.1.0, category는 ai다.
 클러스터 범위 템플릿이므로 metadata.namespace와 --catalog-namespace 옵션을 사용하지 않는다.
-실제 워크로드 배포 대상은 --deploy-namespace로 설정한다. 서버 관리 필드는 복사하지 않는다.
+등록된 Tomcat/WildFly 예시처럼 배포 전략의 clusters 블록 전체를 생략한다. 서버 관리 필드는 복사하지 않는다.
+로고 원본은 ollama-logo.png이며 생성기가 PNG Base64 annotation으로 포함한다.
 
 # Accordion 내부 AI 카탈로그 초안
 
@@ -27,11 +36,9 @@ Accordion 등록·렌더링과 실제 배포는 별도 검증이 필요하다.
 | storageSize | 20Gi | 신규 용량 / 기존 PVC 최소 요청 용량 |
 | storageRevision | 2 | 재실행 또는 준비 설정 변경 시 이전보다 증가 |
 
-카탈로그 등록 namespace는 요청을 따른다. 현재 제공 YAML의 실제 배포 대상은 ai/localcluster다. UI에서 선택한 namespace와 이 대상은 반드시 일치시킨다. UI 선택을 자동으로 따르는 동작은 아직 확인하지 못했다.
-다른 환경은 `python -B deploy/ai_k8s/build_catalog.py --deploy-namespace YOUR_NAMESPACE`로 생성하거나
-YAML의 deployStrategy.clusters에서 실제 클러스터 이름과 namespace를 설정한다.
+현재 제공 YAML은 클러스터와 namespace를 고정하지 않는다. 배포 화면에서 대상을 선택한다.
+clusters 생략 상태의 등록 허용 여부와 화면 선택값이 실제 배포에 적용되는지는 실제 Accordion에서 확인해야 한다.
 이미지 registryName(user-registry)도 해당 Accordion 환경에 등록된 값인지 확인한다.
-등록 namespace를 명시하려면 --catalog-namespace를 추가하고 등록 요청 namespace와 일치시킨다.
 Pod는 실제 namespace를 Downward API로 읽는다. 다른 namespace의 PVC/Secret을 재사용하지 않는다.
 
 ### 처음 배포
@@ -98,7 +105,7 @@ CPU 모델 호출은 최대 180초 대기한다. 프록시 타임아웃과 조�
 ## 생성 및 로컬 검증
 
 ```bash
-python deploy/ai_k8s/build_catalog.py --deploy-namespace ai
+python deploy/ai_k8s/build_catalog.py
 git diff --check
 ```
 
@@ -109,9 +116,9 @@ ConfigMap 변경만으로 이미 실행 중인 Python 프로세스가 새 코드
 참고: https://docs.ollama.com/docker
 https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/
 
-생성기는 --deploy-namespace를 필수로 받는다. proc에 암묵적으로 배포하는 기본값을 제거했다.
+생성기는 namespace를 지정하지 않으며 --deploy-namespace 옵션을 사용하지 않는다.
 기존 proc 리소스는 자동 이동/삭제되지 않는다. ai로 새 배포하면 PVC와 Secret도 별도로 준비되므로
 토큰과 모델 저장소가 proc과 달라진다. 중복 AI가 자원을 예약할 수 있으므로 전환 시 기존 배포를 확인한다.
 
-카탈로그와 일반 Kubernetes 모두 NodePort 30450 → 게이트웨이 8080, externalTrafficPolicy Cluster다.
-동일 클러스터 내 다른 Service가 30450을 점유하면 포트를 바꿔야 한다. 일반 생성기는 --node-port를 지원한다.
+카탈로그와 일반 Kubernetes 모두 NodePort 자동 할당 → 게이트웨이 8080, externalTrafficPolicy Cluster다.
+배포 후 kubectl get svc로 실제 NodePort를 확인한다. 일반 생성기는 선택적으로 --node-port 고정을 지원한다.

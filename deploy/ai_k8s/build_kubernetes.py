@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--values", type=Path, help="JSON overrides of catalog defaults")
     parser.add_argument("--storage-class", help="Override catalog StorageClass")
     parser.add_argument("--storage-size", help="Override catalog storage size")
-    parser.add_argument("--node-port", type=int, default=30450)
+    parser.add_argument("--node-port", type=int, help="Optional fixed port; omit for Kubernetes automatic allocation")
     parser.add_argument("--output", type=Path, default=Path(__file__).parent / "kubernetes")
     args = parser.parse_args()
     for name in (args.name, args.namespace):
@@ -41,7 +41,7 @@ def main():
         values["storageSize"] = args.storage_size
     if not re.fullmatch(r"[1-9][0-9]{0,5}", values["storageRevision"]):
         parser.error("storageRevision must be a positive integer of at most six digits")
-    if not 30000 <= args.node_port <= 32767:
+    if args.node_port is not None and not 30000 <= args.node_port <= 32767:
         parser.error("node-port must be in the default Kubernetes range 30000-32767")
     rendered = render(catalog_resources, args.name, values)
     for resource in rendered:
@@ -49,7 +49,7 @@ def main():
         if resource["kind"] == "RoleBinding":
             for subject in resource["subjects"]:
                 subject["namespace"] = args.namespace
-        if resource["kind"] == "Service":
+        if resource["kind"] == "Service" and args.node_port is not None:
             resource["spec"]["ports"][0]["nodePort"] = args.node_port
     namespace = {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": args.namespace}}
     args.output.mkdir(parents=True, exist_ok=True)

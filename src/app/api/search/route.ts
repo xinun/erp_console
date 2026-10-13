@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { formatMattermostUserName } from '@/lib/mattermost-user';
+import { getMattermostSearchPlan } from '@/lib/mattermost-search';
 import type { SearchResult, SearchResponse, DateRange, MattermostConversationType } from '@/lib/types';
 
 // ─── Text extraction ──────────────────────────────────────────────────────────
@@ -473,17 +474,11 @@ interface MattermostFileInfo {
   mime_type?: string;
 }
 
-function expandShortMattermostTerms(query: string): string {
-  return query
-    .split(/\s+/)
-    .map((term) => /^[가-힣]{1,2}$/.test(term) ? `${term}*` : term)
-    .join(' ');
-}
-
 async function searchMattermost(
   q: string,
   accessToken: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  reportWarning: (message: string) => void
 ): Promise<SearchResult[]> {
   const baseUrl = process.env.MATTERMOST_BASE_URL?.replace(/\/+$/, '');
   if (!baseUrl) throw new Error('Mattermost 서버 환경변수가 설정되지 않았습니다.');
@@ -492,7 +487,8 @@ async function searchMattermost(
     Authorization: `Bearer ${accessToken}`,
     Accept: 'application/json',
   };
-  const searchTerms = expandShortMattermostTerms(q);
+  const plan = getMattermostSearchPlan(q);
+  const warnings = new Set<string>();
   const [teamsResponse, currentUserResponse] = await Promise.all([
     fetch(`${baseUrl}/api/v4/users/me/teams`, { headers, cache: 'no-store' }),
     fetch(`${baseUrl}/api/v4/users/me`, { headers, cache: 'no-store' }),
@@ -504,44 +500,74 @@ async function searchMattermost(
 
   const teams = await teamsResponse.json() as MattermostTeam[];
   const currentUser = currentUserResponse.ok ? await currentUserResponse.json() as MattermostUser : null;
+  async function collectMatches<T>(
+    search: (terms: string) => Promise<T[]>,
+    text: (item: T) => string,
+    preserveOriginalMatches = false
+  ): Promise<T[]> {
+    async function collect(terms: string[]) {
+      const responses = await Promise.allSettled(terms.map(search));
+      return responses.flatMap((response, index) => {
+        if (response.status === 'fulfilled') {
+          if (plan.fallbackTerms.includes(terms[index]) && response.value.length >= 100) {
+            warnings.add('버전 보완 검색 후보가 많아 일부 결과가 누락될 수 있습니다. in:채널명 또는 after:날짜로 범위를 좁혀주세요.');
+          }
+          return response.value.filter((item) => (preserveOriginalMatches && terms[index] === plan.terms[0])
+            || plan.matchesVersion(text(item)));
+        }
+        warnings.add(response.reason instanceof Error ? response.reason.message : 'Mattermost 검색 요청 실패');
+        return [];
+      });
+    }
+    const matches = await collect(plan.terms);
+    return matches.length > 0 || plan.fallbackTerms.length === 0 ? matches : collect(plan.fallbackTerms);
+  }
   const [groups, fileGroups] = await Promise.all([
     Promise.all(teams.map(async (team) => {
-      const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/posts/search`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ terms: searchTerms, is_or_search: false }),
-        cache: 'no-store',
-      });
-      if (!response.ok) return [];
+      const posts = await collectMatches(async (searchTerms) => {
+        const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/posts/search`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ terms: searchTerms, is_or_search: false }),
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error(`Mattermost 메시지 검색 오류 (${response.status})`);
 
-      const data = await response.json() as {
-        order?: string[];
-        posts?: Record<string, MattermostPost>;
-      };
+        const data = await response.json() as {
+          order?: string[];
+          posts?: Record<string, MattermostPost>;
+        };
 
-      return (data.order ?? []).flatMap((postId) => {
-        const post = data.posts?.[postId];
-        if (!post) return [];
-        return [{ post, team }];
-      });
+        return (data.order ?? []).flatMap((postId) => {
+          const post = data.posts?.[postId];
+          if (!post) return [];
+          return [post];
+        });
+      }, (post: MattermostPost) => post.message ?? '');
+      return [...new Map(posts.map((post) => [post.id, { post, team }])).values()];
     })),
     Promise.all(teams.map(async (team) => {
-      const formData = new FormData();
-      formData.set('terms', searchTerms);
-      formData.set('is_or_search', 'false');
-      formData.set('include_deleted_channels', 'true');
-      formData.set('per_page', '100');
-      const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/files/search`, {
-        method: 'POST',
-        headers,
-        body: formData,
-        cache: 'no-store',
-      });
-      if (!response.ok) return [];
-      const data = await response.json() as { file_infos?: MattermostFileInfo[] };
-      return (data.file_infos ?? []).map((file) => ({ file, team }));
+      const files = await collectMatches(async (searchTerms) => {
+        const formData = new FormData();
+        formData.set('terms', searchTerms);
+        formData.set('is_or_search', 'false');
+        formData.set('include_deleted_channels', 'true');
+        formData.set('per_page', '100');
+        const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/files/search`, {
+          method: 'POST',
+          headers,
+          body: formData,
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error(`Mattermost 첨부파일 검색 오류 (${response.status})`);
+        const data = await response.json() as { file_infos?: MattermostFileInfo[] };
+        return data.file_infos ?? [];
+      }, (file: MattermostFileInfo) => file.name ?? '', true);
+      return [...new Map(files.map((file) => [file.id, { file, team }])).values()];
     })),
   ]);
+
+  if (warnings.size > 0) reportWarning([...warnings].join(' · '));
 
   const matches = groups.flat();
   const fileMatches = fileGroups.flat();
@@ -860,7 +886,8 @@ export async function GET(request: NextRequest) {
 
   if (sources.includes('mattermost') && mattermostToken) {
     tasks.push(
-      searchAcrossVariants(searchVariants, (variant) => searchMattermost(variant, mattermostToken, dateRange))
+      searchAcrossVariants(searchVariants, (variant) => searchMattermost(variant, mattermostToken, dateRange,
+        (warning) => { errors.mattermost = warning; }))
         .then((r) => { allResults.push(...r); counts.mattermost = r.length; })
         .catch((e: Error) => { errors.mattermost = e.message; })
     );

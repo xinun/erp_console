@@ -51,12 +51,19 @@ async function runSearch(version, searchResponse) {
       else if (endpoint === '/api/v4/users/me') data = { id: 'user', username: 'tester' };
       else if (endpoint.endsWith('/posts/search') || endpoint.endsWith('/files/search')) {
         const kind = endpoint.endsWith('/posts/search') ? 'posts' : 'files';
-        const terms = kind === 'posts' ? JSON.parse(options.body).terms : options.body.get('terms');
+        assert.equal(options.headers['Content-Type'], 'application/json');
+        const payload = JSON.parse(options.body);
+        assert.equal(typeof payload.is_or_search, 'boolean');
+        if (kind === 'files') {
+          assert.equal(payload.include_deleted_channels, true);
+          assert.equal(payload.per_page, 100);
+        }
+        const terms = payload.terms;
         requests.push({ kind, terms });
         const response = getPosts(terms, kind);
         if (typeof response === 'number') return Response.json({}, { status: response });
         data = kind === 'posts' ? { order: response.map((post) => post.id), posts: Object.fromEntries(response.map((post) => [post.id, post])) }
-          : { file_infos: response };
+          : { order: response.map((file) => file.id), file_infos: Object.fromEntries(response.map((file) => [file.id, file])) };
       } else if (endpoint.endsWith('/channels/ids')) data = [{ id: 'channel', name: 'release', type: 'O' }];
       else if (endpoint === '/api/v4/users/ids') data = [{ id: 'user', username: 'tester' }];
       else throw new Error(`Unexpected endpoint: ${endpoint}`);

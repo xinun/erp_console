@@ -548,20 +548,28 @@ async function searchMattermost(
     })),
     Promise.all(teams.map(async (team) => {
       const files = await collectMatches(async (searchTerms) => {
-        const formData = new FormData();
-        formData.set('terms', searchTerms);
-        formData.set('is_or_search', 'false');
-        formData.set('include_deleted_channels', 'true');
-        formData.set('per_page', '100');
         const response = await fetch(`${baseUrl}/api/v4/teams/${team.id}/files/search`, {
           method: 'POST',
-          headers,
-          body: formData,
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            terms: searchTerms,
+            is_or_search: false,
+            include_deleted_channels: true,
+            per_page: 100,
+          }),
           cache: 'no-store',
         });
         if (!response.ok) throw new Error(`Mattermost 첨부파일 검색 오류 (${response.status})`);
-        const data = await response.json() as { file_infos?: MattermostFileInfo[] };
-        return data.file_infos ?? [];
+        const data = await response.json() as {
+          order?: string[];
+          file_infos?: Record<string, MattermostFileInfo> | MattermostFileInfo[];
+        };
+        const infos = data.file_infos;
+        if (!infos) return [];
+        if (Array.isArray(infos)) return infos;
+        return data.order
+          ? data.order.flatMap((id) => infos[id] ? [infos[id]] : [])
+          : Object.values(infos);
       }, (file: MattermostFileInfo) => file.name ?? '', true);
       return [...new Map(files.map((file) => [file.id, { file, team }])).values()];
     })),

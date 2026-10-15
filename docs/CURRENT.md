@@ -1,14 +1,16 @@
 # 현재 작업 상태
 
-마지막 갱신: 2026-10-13
+마지막 갱신: 2026-10-15
 
 ## 현재 기준
 
 - 브랜치: `main`
-- 최근 확인 커밋: `47ba9a0` (`버전 조회 기능`)
+- 최근 확인 커밋: `fb87f74` (`버전 조회시 400 에러 수정`)
 - 운영 주소: `https://erp-console.vercel.app/search`
 
 ## 최근 완료
+
+- 2026-10-15 Confluence 복수 단어 검색 조건 명시: 기존 text~"한화시스템* wbs*"도 공식 문법상 단어 사이에 다른 내용이 있는 검색을 지원한다. 이를 text~"한화시스템*" AND text~"wbs*"로 변경하여 같은 콘텐츠에 두 조건을 요구함을 코드에 명시했다. 거리·순서 조건은 추가하지 않았다. 단어별 접두어/기간 조건, 기존 한글 공백 제거 검색 변형·중복 제거는 유지한다. Confluence 요청 CQL 및 결과 변환 모의 검사 추가, 실제 사내 Confluence 검색·운영 배포는 미검증이다. 검증 결과는 아래 기록한다.
 
 - 2026-10-13 첨부파일 검색 400/502 보고 대응: 기존 요청이 FormData였으나 공식 Mattermost searchFiles 구현은 JSON Decoder로 SearchParameter를 읽는 것을 확인했다. 첨부 검색을 application/json 및 boolean/number 값으로 수정하고 FileInfoList의 order/file_infos ID 맵 응답을 파싱하도록 보완했다(배열도 수용). 기존 모의 검사가 FormData와 배열을 그대로 가정했던 한계를 수정해 실제 요청/응답 계약을 검사한다. 오류를 숨기던 기존 방식 때문에 이번 오류 표시 추가 후 처음 보였을 수 있다. 사내 서버의 400 응답 본문은 확인하지 않았으며 502 원인은 서버/프록시 로그 없이 확정하지 않는다. 기존 성공 메시지 결과와 오류 표시를 유지한다. 검증 결과는 아래에 기록한다. 운영 재배포 및 실제 서버 정상 응답은 미검증이다.
 
@@ -129,6 +131,8 @@
 - Atlassian 연결 정보와 토큰은 브라우저 `localStorage`에 저장된다.
 
 ## 검증 상태
+
+- 2026-10-15: `node --test tests/confluence-search.test.mjs tests/mattermost-search.test.mjs` 11개 통과. Confluence 복수 단어별 AND 요청·기간 조건·단일 단어 접두어 검색과 기존 Mattermost 회귀 검사를 확인했다. `npm run lint`, `npm run build`, `git diff --check` 통과. Confluence 실제 서버의 색인/권한/전체 결과와 운영 배포는 미검증이다.
 
 - 2026-10-13 첨부 검색 계약 수정: 공식 서버 구현/응답 스키마 확인 후 JSON Content-Type, boolean/number 요청 값 및 order/file_infos 맵 응답을 사용하는 모의 API로 회귀 검사 8개 통과. `npm run lint`, `npm run build`, `git diff --check` 통과. 사내 서버의 실제 400/502 응답 본문·프록시 로그·운영 재배포는 확인하지 않았다.
 

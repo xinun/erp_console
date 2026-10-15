@@ -275,8 +275,10 @@ async function searchConfluence(
   authConfig: AtlassianAuthConfig,
   dateRange: DateRange
 ): Promise<SearchResult[]> {
-  const safeQ = q.replace(/"/g, '\\"').split(/\s+/).filter(Boolean).map(t => `${t}*`).join(' ');
-  const cql = `text~"${safeQ}"${getConfluenceDateFilter(dateRange)} ORDER BY lastModified DESC`;
+  const textConditions = [...new Set(q.trim().split(/\s+/).filter(Boolean))]
+    .map((term) => `text~"${term.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}*"`)
+    .join(' AND ');
+  const cql = `${textConditions}${getConfluenceDateFilter(dateRange)} ORDER BY lastModified DESC`;
 
   const params = new URLSearchParams({ cql, limit: '20', excerpt: 'highlight' });
 

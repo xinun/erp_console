@@ -22,6 +22,7 @@ type DrawerType = 'atlassian' | 'google' | 'mattermost' | null;
 type ThemePreference = 'light' | 'dark' | 'system';
 
 const MEET_RECORDER_DOWNLOAD_URL = 'https://github.com/xinun/simple_recording_tool/releases/download/v0.1.1/MeetRecorder.exe';
+const AI_DASHBOARD_DOWNLOAD_URL = 'https://github.com/xinun/AI-token-monitoring/releases/download/v0.3.6/AI-Token-0.3.6-windows-x64-setup.exe';
 
 interface MattermostConversationOption {
   id: string;
@@ -1663,7 +1664,7 @@ export default function SearchPage() {
         </div>
         <div className="workspace-utilities">
           <button type="button" className={`utility-button connection-trigger ${showConnections ? 'is-active' : ''}`} aria-expanded={showConnections} aria-controls="connection-manager" onClick={() => setShowConnections(!showConnections)}>연결 관리<span className="connection-count">{filterOptions.filter(option => option.available).length}</span></button>
-          <details className="relative tools-menu"><summary className="utility-button cursor-pointer">도구 <IconChevronDown /></summary><div className="tools-popover">
+          <details className="relative tools-menu"><summary className="utility-button cursor-pointer">도구 <IconChevronDown /></summary><div className="tools-popover flex flex-col gap-1">
           <a
             href={MEET_RECORDER_DOWNLOAD_URL}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/30"
@@ -1672,6 +1673,15 @@ export default function SearchPage() {
           >
             <IconDownload />
             <span>녹음기 다운로드</span>
+          </a>
+          <a
+            href={AI_DASHBOARD_DOWNLOAD_URL}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/30"
+            aria-label="Windows용 AI Token 대시보드 v0.3.6 설치 파일 다운로드"
+            title="AI Token v0.3.6 · Windows x64 설치 파일 다운로드"
+          >
+            <IconDownload />
+            <span>AI 대시보드 다운로드</span>
           </a>
           </div></details>
           <div className="relative">

@@ -21,7 +21,7 @@ ERP Console은 여러 사내 서비스의 검색 결과를 하나의 화면에 �
 
 주요 화면은 `src/app/search/page.tsx`, 통합 검색 API는 `src/app/api/search/route.ts`에 있다.
 
-우측 상단 도구 메뉴에서 Windows용 Meet 음성 녹음기를 내려받을 수 있다.
+우측 상단 도구 메뉴에서 Windows용 Meet 음성 녹음기와 AI Token 대시보드 v0.3.6(Windows x64 설치 파일)의 GitHub Release 다운로드 링크를 제공한다.
 
 ## 검색 흐름
 

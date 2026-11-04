@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Installed agent tools and generated browser QA are not application source.
+    ".agents/**",
+    ".taste-skill/**",
   ]),
 ]);
 

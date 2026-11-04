@@ -57,6 +57,14 @@ function IconSearch({ size = 16, className }: { size?: number; className?: strin
   );
 }
 
+function ConsoleMark() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 5h7M3 12h7M3 19h7M10 5l6 7-6 7M16 12h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function IconExternalLink() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -76,8 +84,8 @@ function IconClose() {
 function IconSpinner() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className="animate-spin">
-      <circle cx="7.5" cy="7.5" r="5.5" stroke="#E5E7EB" strokeWidth="2" />
-      <path d="M7.5 2a5.5 5.5 0 0 1 5.5 5.5" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" opacity="0.2" strokeWidth="2" />
+      <path d="M7.5 2a5.5 5.5 0 0 1 5.5 5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -199,19 +207,19 @@ function IconService({ type }: { type: NonNullable<DrawerType> }) {
 // ─── Source Badge ─────────────────────────────────────────────────────────────
 
 function SourceBadge({ source, fileType }: { source: SearchSource; fileType?: string }) {
-  const styles: Record<SearchSource, { bg: string; text: string; border: string; label: string }> = {
-    jira: { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', label: 'Jira' },
-    jsm: { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA', label: '고객 문의' },
-    confluence: { bg: '#F5F3FF', text: '#5B21B6', border: '#DDD6FE', label: 'Confluence' },
-    drive: { bg: '#F0FDF4', text: '#166534', border: '#BBF7D0', label: fileType ?? 'Drive' },
-    mattermost: { bg: '#FFF1F2', text: '#BE123C', border: '#FECDD3', label: 'Mattermost' },
+  const styles: Record<SearchSource, { label: string }> = {
+    jira: { label: 'Jira' },
+    jsm: { label: '고객 문의' },
+    confluence: { label: 'Confluence' },
+    drive: { label: fileType ?? 'Drive' },
+    mattermost: { label: 'Mattermost' },
   };
   const s = styles[source];
   return (
     <span
       className="source-label inline-flex items-center gap-1.5 text-xs font-medium"
     >
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.text }} />{s.label}
+      <span className={`source-dot source-dot-${source}`} />{s.label}
     </span>
   );
 }
@@ -298,9 +306,9 @@ function ResultScrollTools({
   return (
     <>
       {results.length > 5 && (
-        <div className="group fixed right-4 top-1/2 z-20 hidden -translate-y-1/2 items-center xl:flex">
+        <div className="result-scroll-tools group fixed right-4 top-1/2 z-20 hidden -translate-y-1/2 items-center xl:flex">
           <span aria-hidden="true" className="absolute right-full top-0 h-full w-5" />
-          <div className="pointer-events-none absolute right-full mr-3 w-44 translate-x-2 rounded-xl border border-black/10 bg-white/90 p-2 opacity-0 shadow-xl backdrop-blur transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100">
+          <div className="pointer-events-none absolute right-full mr-3 w-44 translate-x-2 rounded-xl border border-black/10 bg-white/90 p-2 opacity-0 shadow-xl transition-[opacity,transform] duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100">
             <div className="mb-1 flex items-center justify-between px-2 py-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40">결과 이동</span>
               <span className="text-[10px] tabular-nums text-black/40">{results.length}</span>
@@ -317,7 +325,7 @@ function ResultScrollTools({
               </button>
             ))}
           </div>
-          <div className="rounded-full bg-white/50 p-3 backdrop-blur-sm transition-colors group-hover:bg-white/80" title="클릭하거나 드래그해 결과 위치 이동">
+          <div className="scroll-track-shell rounded-full p-3 transition-colors" title="클릭하거나 드래그해 결과 위치 이동">
             <div
               ref={trackRef}
               role="slider"
@@ -363,7 +371,7 @@ function ResultScrollTools({
         <button
           type="button"
           onClick={() => scrollContainer.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition-all hover:-translate-y-0.5 hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
+          className="fixed bottom-6 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition-[opacity,transform] hover:-translate-y-0.5 hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
           aria-label="맨 위로 이동"
           title="맨 위로"
         >
@@ -380,10 +388,12 @@ function ResultCard({
   result,
   query,
   onPreview,
+  selected,
 }: {
   result: SearchResult;
   query: string;
   onPreview: (result: SearchResult) => void;
+  selected: boolean;
 }) {
   const [threadExpanded, setThreadExpanded] = useState(false);
   const meta: string[] = [];
@@ -416,7 +426,7 @@ function ResultCard({
           openPreview();
         }
       }}
-      className="result-row group h-full cursor-pointer border-b border-[var(--border)] py-5 px-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
+      className={`result-row group h-full cursor-pointer border-b border-[var(--border)] py-5 px-2 transition-colors ${selected ? 'is-selected' : ''}`}
       aria-label={`${result.title} 미리보기`}
       data-result-source={result.source}
     >
@@ -426,7 +436,7 @@ function ResultCard({
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <SourceBadge source={result.source} fileType={result.fileType} />
               {result.resultKind === 'attachment' && (
-                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">첨부파일</span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">첨부파일</span>
               )}
               {result.source === 'drive' && result.matchType && (
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -457,7 +467,7 @@ function ResultCard({
                       <span className="font-semibold text-slate-600">{message.author}</span>
                       <span className="text-slate-400">{formatDate(message.date)}</span>
                     </span>
-                    <span className="line-clamp-2 block text-sm leading-relaxed text-slate-500">
+                    <span className="line-clamp-2 text-sm leading-relaxed text-slate-500">
                       <HighlightedText text={message.message} query={query} />
                     </span>
                   </span>
@@ -477,14 +487,14 @@ function ResultCard({
                 )}
               </span>
             ) : result.snippet && (
-              <span className="line-clamp-2 block text-sm leading-relaxed text-gray-500">
+              <span className="line-clamp-2 text-sm leading-relaxed text-gray-500">
                 <HighlightedText text={result.snippet} query={query} />
               </span>
             )}
             {meta.length > 0 && (
               <span className="mt-2 flex flex-wrap items-center">
                 {meta.map((m, i) => (
-                  <span key={i} className="text-xs text-gray-400">
+                  <span key={i} className="whitespace-nowrap text-xs text-gray-400">
                     {i > 0 && <span className="mx-1.5">·</span>}
                     {m}
                   </span>
@@ -502,7 +512,7 @@ function ResultCard({
             event.stopPropagation();
             openPreview();
           }}
-          className="mt-0.5 flex flex-shrink-0 items-center gap-1 text-xs text-gray-400 opacity-0 transition-opacity hover:text-blue-600 group-hover:opacity-100 focus-visible:opacity-100"
+          className="preview-action mt-0.5 flex flex-shrink-0 items-center gap-1 text-xs"
         >
           미리보기 <IconChevronRight />
         </button>
@@ -587,7 +597,7 @@ function ResultPreview({
         role="dialog"
         aria-modal="true"
         aria-labelledby="result-preview-title"
-        className="preview-panel relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl lg:h-full lg:max-h-full lg:rounded-none"
+        className="preview-panel relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl lg:h-full lg:max-h-full lg:max-w-[780px] lg:rounded-none"
       >
         <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0 flex-1">
@@ -613,7 +623,7 @@ function ResultPreview({
             <IconClose />
           </button>
         </div>
-        <div className="overflow-y-auto px-5 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {isJira ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
               <div className="min-w-0 space-y-7">
@@ -708,7 +718,7 @@ function ResultPreview({
               </div>
               {threadLoading && threadMessages.length === 0 ? (
                 <div className="space-y-3">
-                  {[0, 1, 2].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
+                  {[0, 1, 2].map((item) => <div key={item} className="h-20 rounded-xl bg-slate-100" />)}
                 </div>
               ) : (
                 <div className="relative space-y-3 before:absolute before:bottom-5 before:left-4 before:top-5 before:w-px before:bg-slate-200">
@@ -743,7 +753,7 @@ function ResultPreview({
             <p className="py-8 text-center text-sm text-slate-400">미리 볼 수 있는 본문이 없습니다.</p>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3">
           <button
             type="button"
             onClick={onClose}
@@ -976,7 +986,7 @@ function GoogleDrawerContent({ connected, email, loading, hasClientId, onConnect
       <button
         onClick={onConnect}
         disabled={loading}
-        className="w-full h-10 flex items-center justify-center gap-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+        className="w-full h-10 flex items-center justify-center gap-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <svg width="16" height="16" viewBox="0 0 24 24">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -1101,6 +1111,28 @@ const DRAWER_DESCS: Record<NonNullable<DrawerType>, string> = {
 };
 
 function Drawer({ open, type, atlassianAuth, google, mattermost, onClose }: DrawerProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const panel = panelRef.current;
+    panel?.focus();
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || !panel) return;
+      const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])'))
+        .filter((element) => element.getClientRects().length > 0);
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel)) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener('keydown', trapFocus);
+    return () => { document.removeEventListener('keydown', trapFocus); previousFocus?.focus(); };
+  }, [open]);
   return (
     <>
       {/* Backdrop */}
@@ -1113,7 +1145,13 @@ function Drawer({ open, type, atlassianAuth, google, mattermost, onClose }: Draw
       )}
       {/* Panel — inline style로 transform 처리 (Tailwind v4의 translate vs transform 충돌 방지) */}
       <div
-        className="fixed top-0 right-0 h-full bg-white border-l border-gray-200 shadow-xl z-50 flex flex-col"
+        className="connection-drawer fixed top-0 right-0 h-full bg-white border-l border-gray-200 shadow-xl z-50 flex flex-col"
+        ref={panelRef}
+        tabIndex={-1}
+        role={open ? "dialog" : undefined}
+        aria-modal={open ? true : undefined}
+        aria-labelledby={open ? "connection-drawer-title" : undefined}
+        inert={!open}
         style={{
           width: 'min(400px, 100vw)',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -1124,12 +1162,13 @@ function Drawer({ open, type, atlassianAuth, google, mattermost, onClose }: Draw
           <>
             <div className="flex items-start justify-between p-5 border-b border-gray-100">
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">{DRAWER_TITLES[type]}</h2>
+                <h2 id="connection-drawer-title" className="text-sm font-semibold text-gray-900">{DRAWER_TITLES[type]}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{DRAWER_DESCS[type]}</p>
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
+                className="connection-drawer-close"
+                aria-label="서비스 연결 닫기"
               >
                 <IconClose />
               </button>
@@ -1227,129 +1266,43 @@ function Sidebar({
   const availableGroups = groups.filter((group) => !group.connected);
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-slate-200/80 bg-slate-50/70 flex flex-col overflow-y-auto">
-      <div className="flex-1 px-3 py-4">
-        {/* Service groups */}
-        <div className="mb-5">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">연결</p>
-              <p className="mt-0.5 text-xs text-slate-500">{connectedGroups.length}개 서비스 그룹 사용 중</p>
+    <aside>
+      <div className="connection-list">
+        <p className="connection-list-heading">{connectedGroups.length}개 서비스 그룹 사용 중</p>
+        {connectedGroups.map((group) => (
+          <section key={group.groupLabel} className="connection-group">
+            <div className="connection-group-header">
+              <IconService type={group.drawerType as NonNullable<DrawerType>} />
+              <span>{group.groupLabel}</span>
+              <span className="connection-state">연결됨</span>
             </div>
-            <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 shadow-sm">
-              {connectedGroups.length}
-            </span>
+            {group.services.map((service) => (
+              <button key={service.name} type="button" className="connection-service" onClick={() => onServiceClick(group.drawerType)}>
+                <span><strong>{service.name}</strong><small>{service.desc}</small></span>
+                <IconChevronRight />
+              </button>
+            ))}
+          </section>
+        ))}
+        {connectedGroups.length === 0 && (
+          <div className="connection-empty">
+            아직 연결된 서비스가 없습니다.
+            <p>아래에서 검색 서비스를 추가하세요.</p>
           </div>
-          <div className="space-y-2">
-          {connectedGroups.map((group) => (
-            <div key={group.groupLabel} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
-              <div className="flex items-center gap-2.5 border-b border-slate-100 px-3 py-2.5">
-                <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  group.drawerType === 'google'
-                      ? 'bg-emerald-50 text-emerald-600'
-                      : group.drawerType === 'mattermost'
-                        ? 'bg-rose-50 text-rose-600'
-                        : 'bg-blue-50 text-blue-600'
-                }`}>
-                  <IconService type={group.drawerType as NonNullable<DrawerType>} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-700">{group.groupLabel}</p>
-                  <p className="text-[11px] text-emerald-600">연결됨</p>
-                </div>
-              </div>
-              <div className="p-1.5">
-                {group.services.map((service) => (
-                  <button
-                    key={service.name}
-                    type="button"
-                    onClick={() => onServiceClick(group.drawerType)}
-                    className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
-                  >
-                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400 ring-2 ring-emerald-50" />
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium text-slate-700">{service.name}</span>
-                      <span className="block truncate text-[10px] text-slate-400">{service.desc}</span>
-                    </div>
-                    <span className="flex-shrink-0 translate-x-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-slate-500">
-                      <IconChevronRight />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          {connectedGroups.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-center">
-              <p className="text-xs font-medium text-slate-500">아직 연결된 서비스가 없습니다.</p>
-              <p className="mt-1 text-[11px] text-slate-400">아래에서 검색 서비스를 추가하세요.</p>
-            </div>
-          )}
+        )}
+        <button type="button" className="connection-add" aria-expanded={showAddMenu} aria-controls="sidebar-add-service-menu" onClick={() => setShowAddMenu((current) => !current)}>
+          <IconPlus /><span>연결 추가</span><IconChevronDown open={showAddMenu} />
+        </button>
+        {showAddMenu && (
+          <div id="sidebar-add-service-menu" className="connection-add-menu">
+            {availableGroups.length > 0 ? availableGroups.map((group) => (
+              <button key={group.groupLabel} type="button" onClick={() => { setShowAddMenu(false); onServiceClick(group.drawerType); }}>
+                <IconService type={group.drawerType as NonNullable<DrawerType>} />
+                <span>{group.groupLabel}</span>
+              </button>
+            )) : <p className="p-3 text-xs text-[var(--text-secondary)]">모든 서비스를 연결했습니다.</p>}
           </div>
-        </div>
-
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowAddMenu((current) => !current)}
-            aria-expanded={showAddMenu}
-            aria-controls="sidebar-add-service-menu"
-            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
-              showAddMenu
-                ? 'border-slate-400 bg-slate-100 text-slate-900 shadow-sm'
-                : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:-translate-y-0.5 hover:border-slate-400 hover:text-slate-900 hover:shadow-md'
-            }`}
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 transition-colors">
-              <IconPlus />
-            </span>
-            <span className="flex-1 text-left">연결 추가</span>
-            <IconChevronDown open={showAddMenu} />
-          </button>
-          <div
-            id="sidebar-add-service-menu"
-            aria-hidden={!showAddMenu}
-            className={`grid transition-all duration-300 ease-out ${
-              showAddMenu
-                ? 'grid-rows-[1fr] opacity-100 translate-y-0'
-                : 'pointer-events-none grid-rows-[0fr] -translate-y-1 opacity-0'
-            }`}
-          >
-            <div className="overflow-hidden">
-              <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-slate-200/60">
-              {availableGroups.length > 0 ? availableGroups.map((group) => (
-                <button
-                  key={group.groupLabel}
-                  type="button"
-                  onClick={() => {
-                    setShowAddMenu(false);
-                    onServiceClick(group.drawerType);
-                  }}
-                  tabIndex={showAddMenu ? 0 : -1}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
-                >
-                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-slate-200 group-hover:text-slate-900">
-                    <IconService type={group.drawerType as NonNullable<DrawerType>} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-slate-700">{group.groupLabel}</span>
-                    <span className="block truncate text-[10px] text-slate-400">
-                      {group.services.length > 0
-                        ? group.services.map((service) => service.name).join(', ')
-                        : group.drawerType === 'atlassian' ? 'Jira, Confluence' : 'Jira Service Management'}
-                    </span>
-                  </span>
-                  <span className="text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-slate-700">
-                    <IconChevronRight />
-                  </span>
-                </button>
-              )) : (
-                <p className="px-3 py-3 text-center text-xs text-slate-400">모든 서비스를 연결했습니다.</p>
-              )}
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   );
@@ -1364,6 +1317,7 @@ export default function SearchPage() {
 
   const [activeDrawer, setActiveDrawer] = useState<DrawerType>(null);
   const [showConnections, setShowConnections] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [submittedConditions, setSubmittedConditions] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
@@ -1700,21 +1654,21 @@ export default function SearchPage() {
   return (
     <div className="search-workspace h-full flex flex-col">
       {/* Header */}
-      <header className="h-14 flex-shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900">
-            <IconSearch size={13} className="text-white" />
-          </div>
-          <span className="text-sm font-semibold text-gray-800">검색 콘솔</span>
+      <header className="workspace-header">
+        <div className="workspace-header-inner">
+        <div className="workspace-brand">
+          <ConsoleMark />
+          <span>검색 콘솔</span>
+          <span className="workspace-context">업무 자료</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" className="utility-button" aria-expanded={showConnections} aria-controls="connection-manager" onClick={() => setShowConnections(!showConnections)}>연결 관리<span className="hidden sm:inline"> · {filterOptions.filter(option => option.available).length}개 연결됨</span></button>
-          <details className="relative tools-menu"><summary className="utility-button cursor-pointer">도구</summary><div className="tools-popover">
+        <div className="workspace-utilities">
+          <button type="button" className={`utility-button connection-trigger ${showConnections ? 'is-active' : ''}`} aria-expanded={showConnections} aria-controls="connection-manager" onClick={() => setShowConnections(!showConnections)}>연결 관리<span className="connection-count">{filterOptions.filter(option => option.available).length}</span></button>
+          <details className="relative tools-menu"><summary className="utility-button cursor-pointer">도구 <IconChevronDown /></summary><div className="tools-popover">
           <a
             href={MEET_RECORDER_DOWNLOAD_URL}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/30"
             aria-label="Windows용 Meet 음성 녹음기 다운로드"
-            title="Windows용 Meet 음성 녹음기 v0.1.0 다운로드"
+            title="Windows용 Meet 음성 녹음기 다운로드"
           >
             <IconDownload />
             <span>녹음기 다운로드</span>
@@ -1727,14 +1681,14 @@ export default function SearchPage() {
                 setShowThemeMenu((current) => !current);
                 setShowProfile(false);
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              className="icon-button"
               aria-label="테마 선택"
               aria-expanded={showThemeMenu}
             >
               <IconTheme />
             </button>
             {showThemeMenu && (
-              <div className="absolute right-0 top-full z-30 mt-2 w-40 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+              <div className="workspace-popover absolute right-0 top-full z-30 mt-2 w-40 p-1.5">
                 {([
                   ['light', '라이트'],
                   ['dark', '다크'],
@@ -1747,9 +1701,7 @@ export default function SearchPage() {
                       setThemePreference(value);
                       setShowThemeMenu(false);
                     }}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${
-                      themePreference === value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
+                    className={`menu-option ${themePreference === value ? 'is-active' : ''}`}
                   >
                     {label}
                     {themePreference === value ? <IconCheck /> : null}
@@ -1765,13 +1717,14 @@ export default function SearchPage() {
               setShowProfile((current) => !current);
               setShowThemeMenu(false);
             }}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-xs font-semibold text-white hover:bg-gray-700"
+            className="profile-button"
             aria-label="사용자 프로필"
+            aria-expanded={showProfile}
           >
             {(google.email || 'U').slice(0, 1).toUpperCase()}
           </button>
           {showProfile && (
-            <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+            <div className="workspace-popover absolute right-0 top-full z-30 mt-2 w-64 p-4">
               <p className="text-sm font-semibold text-gray-800">내 프로필</p>
               <p className="mt-0.5 truncate text-xs text-gray-500">{google.email || '이 브라우저의 사용자'}</p>
               <div className="my-3 border-t border-gray-100" />
@@ -1798,6 +1751,7 @@ export default function SearchPage() {
           )}
           </div>
         </div>
+        </div>
       </header>
 
       {/* Body */}
@@ -1812,48 +1766,66 @@ export default function SearchPage() {
 
         {/* Main */}
         <main ref={mainScrollRef} className="theme-page-background relative flex-1 overflow-y-auto bg-[#F4F5F7]">
-          <div className="search-content mx-auto px-5 py-8 sm:px-8">
+          <div className="search-content">
+            <div className="workspace-title">
+              <div>
+                <h1>통합검색</h1>
+                <p>문서와 이슈, 대화를 함께 검색합니다.</p>
+              </div>
+              <span className="workspace-scope">문서 · 이슈 · 대화</span>
+            </div>
             {/* Search and filters */}
-            {hasAnyConnection && <div className="search-controls mb-8">
-              <h1 className="mb-4 text-xl font-semibold tracking-tight">통합검색</h1>
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
+            <div className="search-controls">
+              <label htmlFor="workspace-query" className="sr-only">통합 검색어</label>
+              <div className={`search-entry ${!hasAnyConnection ? 'is-unconnected' : ''}`}>
+                <div className="search-input-wrap">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-primary)]">
                     <IconSearch size={15} />
                   </span>
                   <input
                     ref={inputRef}
+                    id="workspace-query"
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     aria-label="통합 검색어"
+                    aria-describedby={!hasAnyConnection ? 'connection-hint' : undefined}
+                    disabled={!hasAnyConnection}
                     placeholder="문서, 이슈, 대화 검색"
-                    className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-sm placeholder-slate-400 transition-shadow focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
+                    className="search-query"
                   />
                 </div>
                 <button
                   onClick={() => void handleSearch('normal')}
-                  disabled={isLoading || !query.trim()}
-                  className="flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!hasAnyConnection || isLoading || !query.trim()}
+                  className="search-submit"
                 >
                   {isLoading && <IconSpinner />}
-                  검색
+                  {isLoading ? '검색 중' : '검색'}
                 </button>
               </div>
 
-              <div className="mt-3 border-t border-[var(--border)] pt-3">
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+              {!hasAnyConnection && <p id="connection-hint" className="connection-hint">아래에서 서비스를 연결하면 검색할 수 있습니다.</p>}
+              {hasAnyConnection && <>
+              <button type="button" className="mobile-filter-toggle" aria-expanded={showMobileFilters} aria-controls="search-scope-filters" onClick={() => setShowMobileFilters((current) => !current)}>
+                <span>검색 범위</span>
+                <span>{filterOptions.filter((option) => option.available && filters.sources.includes(option.value)).length}개 서비스 · {dateOptions.find((option) => option.value === filters.dateRange)?.label}</span>
+                <IconChevronDown open={showMobileFilters} />
+              </button>
+              <div id="search-scope-filters" className={`search-filter-bar ${showMobileFilters ? 'is-mobile-open' : ''}`}>
+                <div className="search-filter-options">
                   <span className="text-xs font-semibold text-[var(--text-primary)]">검색 대상</span>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     {filterOptions.map(({ value, label, available }) => (
                       <label
                         key={value}
-                        className={`flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] ${available ? 'cursor-pointer hover:text-[var(--text-primary)]' : 'cursor-not-allowed opacity-40'}`}
+                        className={`source-filter ${!available ? 'is-unavailable' : ''}`}
+                        title={!available ? `${label} 연결이 필요합니다` : undefined}
                       >
                         <input
                           type="checkbox"
-                          checked={filters.sources.includes(value)}
+                          checked={available && filters.sources.includes(value)}
                           onChange={() => available && toggleSource(value)}
                           disabled={!available}
                           className="h-4 w-4 rounded border-[var(--border)] accent-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
@@ -1862,7 +1834,7 @@ export default function SearchPage() {
                       </label>
                     ))}
                   </div>
-                  <label className="ml-auto flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
+                  <label className="date-filter">
                     <span>기간</span>
                     <select
                       value={filters.dateRange}
@@ -1878,7 +1850,7 @@ export default function SearchPage() {
                 </div>
               </div>
 
-              <details className="advanced-filters mt-3"><summary className="cursor-pointer py-2 text-sm text-[var(--text-secondary)]">상세 필터<span className="ml-2 text-xs">{excludedKeywords || filters.googleFileTypes.length !== 4 || filters.googleSearchAreas.length !== 3 ? "조건 설정됨" : "파일 유형 · 검색 위치 · 제외어"}</span></summary>
+              <details className="advanced-filters"><summary><IconChevronDown /><span>상세 필터</span><span className="filter-summary">{excludedKeywords || filters.googleFileTypes.length !== 4 || filters.googleSearchAreas.length !== 3 ? '조건 설정됨' : '파일 유형 · 검색 위치 · 제외어'}</span></summary>
               {filters.sources.includes('drive') && google.connected && (
                 <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${google.connected ? '' : 'pointer-events-none opacity-40'}`}>
                   <fieldset className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -1948,30 +1920,17 @@ export default function SearchPage() {
               </div>
               </details>
               {hasSearched && submittedConditions !== JSON.stringify({ filters, excludedKeywords }) && <p className="mt-3 text-sm text-[var(--text-secondary)]" role="status">검색 조건이 변경되었습니다. 검색 버튼을 눌러 적용하세요.</p>}
-            </div>}
-
-            {/* Loading skeleton */}
-            {isLoading && results.length === 0 && (
-              <div className="space-y-2">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
-                    <div className="h-5 w-14 bg-gray-100 rounded mb-2.5" />
-                    <div className="h-4 bg-gray-100 rounded w-2/3 mb-2" />
-                    <div className="h-3 bg-gray-100 rounded w-full mb-1" />
-                    <div className="h-3 bg-gray-100 rounded w-4/5" />
-                  </div>
-                ))}
-              </div>
-            )}
+              </>}
+            </div>
 
             {/* Results */}
             {hasSearched && (
               <>
-                <div className="sticky top-0 z-10 mb-4 border-b border-slate-200 bg-slate-50/95 pt-1 backdrop-blur">
+                <div className="results-toolbar sticky top-0 z-10">
                   <p className="text-sm text-gray-600">
                     <span className="font-semibold text-gray-900">&apos;{submittedQuery}&apos;</span>{' '}
                     검색 결과{' '}
-                    <span className="font-semibold text-[var(--text-primary)]">{totalCount}건</span>
+                    <span className="font-semibold text-[var(--text-primary)]" aria-live="polite">{isLoading && totalCount === 0 ? '검색 중' : `${totalCount}건`}</span>
                   </p>
                   {showingRelatedResults && (
                     <p className="mt-1 text-xs text-amber-700">
@@ -1979,7 +1938,7 @@ export default function SearchPage() {
                     </p>
                   )}
                   {totalCount > 0 && (
-                    <div className="mt-2 flex items-end justify-between gap-3">
+                    <div className="results-heading-row mt-2 flex items-end justify-between gap-3">
                       <div className="flex min-w-0 gap-1 overflow-x-auto" role="tablist" aria-label="결과 서비스 필터">
                         {resultSourceOptions.map((option) => {
                           const active = resultSource === option.value;
@@ -1990,21 +1949,17 @@ export default function SearchPage() {
                               role="tab"
                               onClick={() => setResultSource(option.value)}
                               aria-selected={active}
-                              className={`relative flex flex-none items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-500 ${
-                                active
-                                  ? 'border-slate-900 text-[var(--text-primary)]'
-                                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
-                              }`}
+                              className={`result-tab ${active ? 'is-active' : ''}`}
                             >
                               {option.label}
-                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-slate-200 text-slate-800' : 'bg-slate-200 text-slate-500'}`}>
+                              <span className="result-tab-count">
                                 {option.count}
                               </span>
                             </button>
                           );
                         })}
                       </div>
-                      <div className="mb-1 flex flex-none items-center gap-2">
+                      <div className="result-view-controls mb-1 flex flex-none items-center gap-2">
                         <label className="sr-only" htmlFor="result-sort">결과 정렬</label>
                         <select
                           id="result-sort"
@@ -2120,6 +2075,20 @@ export default function SearchPage() {
                   )}
                 </div>
 
+            {/* Loading skeleton */}
+            {isLoading && results.length === 0 && (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="border-b border-[var(--border)] py-5 px-3">
+                    <div className="h-5 w-14 bg-gray-100 rounded mb-2.5" />
+                    <div className="h-4 bg-gray-100 rounded w-2/3 mb-2" />
+                    <div className="h-3 bg-gray-100 rounded w-full mb-1" />
+                    <div className="h-3 bg-gray-100 rounded w-4/5" />
+                  </div>
+                ))}
+              </div>
+            )}
+
                 {Object.keys(errors).length > 0 && (
                   <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1">
                     {errors.global && <p className="text-xs text-amber-700">{errors.global}</p>}
@@ -2141,6 +2110,7 @@ export default function SearchPage() {
                         result={result}
                         query={submittedQuery}
                         onPreview={handlePreview}
+                        selected={previewResult?.id === result.id && previewResult?.source === result.source}
                       />
                     ))}
                   </div>
@@ -2169,36 +2139,55 @@ export default function SearchPage() {
 
             {/* Initial state */}
             {!hasSearched && !isLoading && (
-              <div className="empty-state py-16 sm:py-24">
+              <div className={`empty-state ${hasAnyConnection ? 'search-ready' : 'onboarding-layout'}`}>
                 {hasAnyConnection ? (
-                  <p className="text-sm text-gray-400">
-                    찾으려는 문서 제목이나 대화 속 단어를 입력하세요.
-                  </p>
+                  <>
+                    <div>
+                      <h2>무엇을 찾고 계신가요?</h2>
+                      <p>문서 제목이나 대화 속 단어로 검색을 시작하세요.</p>
+                      <div className="query-examples" aria-label="검색어 예시">
+                        {['릴리스 노트', '배포 가이드', '회의록'].map((example) => (
+                          <button key={example} type="button" onClick={() => { setQuery(example); inputRef.current?.focus(); }}>
+                            <IconSearch size={13} />{example}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="search-guidance">
+                      <h3>검색 범위를 좁히려면</h3>
+                      <p>검색 대상과 기간을 먼저 선택하세요. 상세 필터에서 파일 유형과 제외할 단어도 지정할 수 있습니다.</p>
+                    </div>
+                  </>
                 ) : (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">
-                      검색할 서비스를 연결하세요.
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Jira 이슈부터 문서와 대화까지, 한 곳에서 찾아보세요.
-                    </p>
-                    <div className="onboarding-services mt-8">
+                  <>
+                  <div className="onboarding-main">
+                    <h2>검색할 서비스를 연결하세요</h2>
+                    <p>사용 중인 계정으로 연결하고, 필요한 자료를 찾아보세요.</p>
+                    <div className="onboarding-services">
                       {([
                         { type: 'atlassian', title: 'Jira · Confluence', description: '이슈와 위키 문서' },
                         { type: 'google', title: 'Google Drive', description: '문서와 공유 파일' },
                         { type: 'mattermost', title: 'Mattermost', description: '채널과 대화' },
                       ] as const).map(service => (
                         <button key={service.type} type="button" className="onboarding-service" onClick={() => setActiveDrawer(service.type)}>
+                          <IconService type={service.type} />
                           <span>
                             <span className="block text-sm font-semibold">{service.title}</span>
                             <span className="mt-1 block text-xs text-[var(--text-secondary)]">{service.description}</span>
                           </span>
-                          <span className="text-xs">연결 →</span>
+                          <span className="connect-affordance">연결 <IconChevronRight /></span>
                         </button>
                       ))}
                     </div>
-                    <p className="mt-5 text-xs text-[var(--text-secondary)]">연결 정보는 현재 브라우저에 저장됩니다.</p>
                   </div>
+                  <aside className="onboarding-note">
+                    <h3>내 계정으로 찾는 업무 자료</h3>
+                    <p>연결한 계정에 접근 권한이 있는 문서, 이슈, 대화를 검색합니다.</p>
+                    <div className="onboarding-note-divider" />
+                    <h3>연결은 이 브라우저에</h3>
+                    <p>연결 정보는 현재 브라우저에 저장됩니다. 다른 기기에서는 다시 연결해 주세요.</p>
+                  </aside>
+                  </>
                 )}
               </div>
             )}
